@@ -1,0 +1,30 @@
+{
+  "name": "caching-proxy",
+  "version": "1.0.0",
+  "description": "A CLI tool that starts a caching proxy server to forward and cache requests",
+  "main": "src/index.js",
+  "bin": {
+    "caching-proxy": "./src/index.js"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node src/index.js",
+    "test": "node src/index.js --port 3000 --origin http://dummyjson.com"
+  },
+  "keywords": [
+    "proxy",
+    "cache",
+    "caching-proxy",
+    "cli",
+    "http-proxy"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "commander": "^11.1.0"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
+
