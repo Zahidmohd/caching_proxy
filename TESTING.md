@@ -79,7 +79,36 @@ curl http://localhost:3000/products
 **Expected**: Server responds to any endpoint
 **Result**: ✅ PASS - Responds correctly
 
+### ✅ Test 11: Request Forwarding to Origin
+```bash
+node src/index.js --port 3002 --origin https://dummyjson.com
+curl http://localhost:3002/products/1
+```
+**Expected**: Proxy forwards request to origin and returns actual data
+**Result**: ✅ PASS - Returns JSON data from dummyjson.com
+
+### ✅ Test 12: Query Parameters Forwarding
+```bash
+curl http://localhost:3002/products?limit=3
+```
+**Expected**: Query parameters are forwarded correctly
+**Result**: ✅ PASS - Returns limited results with all headers preserved
+
+### ✅ Test 13: HTTP to HTTPS Forwarding
+```bash
+node src/index.js --port 3002 --origin https://dummyjson.com
+```
+**Expected**: Proxy handles HTTPS origin servers
+**Result**: ✅ PASS - Successfully forwards to HTTPS origins
+
+### ✅ Test 14: Status Code Forwarding
+```bash
+curl -i http://localhost:3002/products/1
+```
+**Expected**: Status codes from origin are forwarded to client
+**Result**: ✅ PASS - HTTP 200 status code properly forwarded
+
 ## Next Testing Phase
 
-Stage 3 (continued) will add request forwarding to the origin server.
+Stage 3 (continued) will add support for all HTTP methods and request body forwarding.
 
