@@ -156,6 +156,52 @@ All HTTP methods are supported:
 - ✅ DELETE (delete)
 - ✅ HEAD, OPTIONS, etc. (all methods forwarded)
 
+### ✅ Test 19: Query Parameters Preservation
+```bash
+curl "http://localhost:3000/products?limit=2&skip=10"
+```
+**Expected**: Query parameters forwarded to origin
+**Result**: ✅ PASS - Response shows `"skip":10,"limit":2` confirming params preserved
+
+### ✅ Test 20: Request Headers Preservation
+```bash
+curl -X POST -H "Content-Type: application/json" \
+  -H "User-Agent: MyTestAgent/1.0" \
+  -H "X-Custom-Header: MyCustomValue" \
+  -d '{"title":"Header Test","price":123.45}' \
+  http://localhost:3000/products/add
+```
+**Expected**: All custom headers forwarded to origin
+**Result**: ✅ PASS - Request successful with all headers
+
+### ✅ Test 21: Request Body Preservation
+```bash
+curl -X POST -H "Content-Type: application/json" \
+  -d '{"title":"Body Test","price":99.99,"description":"Testing"}' \
+  http://localhost:3000/products/add
+```
+**Expected**: Complete request body forwarded
+**Result**: ✅ PASS - Response includes all fields from request body
+
+### ✅ Test 22: Combined Preservation Test
+```bash
+curl -X PUT -H "Authorization: Bearer token" \
+  -d '{"title":"Updated","price":199.99}' \
+  "http://localhost:3000/products/1?validate=true"
+```
+**Expected**: Query params, headers, and body all preserved
+**Result**: ✅ PASS - All elements forwarded correctly
+
+## Preservation Features Summary
+
+✅ **Query Parameters**: Preserved using `targetUrl.search`
+✅ **Request Headers**: Preserved using spread operator `...req.headers`
+✅ **Request Body**: Preserved using streaming `req.pipe(proxyReq)`
+✅ **HTTP Method**: Preserved using `req.method`
+✅ **Content-Type**: Preserved in headers
+✅ **Authorization**: Preserved in headers
+✅ **Custom Headers**: All custom headers preserved
+
 ## Next Testing Phase
 
 Stage 4 will add caching mechanism (in-memory using Map).

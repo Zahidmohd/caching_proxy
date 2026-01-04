@@ -9,13 +9,14 @@ const { URL } = require('url');
 
 /**
  * Forward request to origin server
+ * Preserves: headers, query parameters, request body, and HTTP method
  * @param {http.IncomingMessage} req - Incoming request
  * @param {http.ServerResponse} res - Response object
  * @param {string} origin - Origin server URL
  */
 function forwardRequest(req, res, origin) {
   const originUrl = new URL(origin);
-  const targetUrl = new URL(req.url, origin);
+  const targetUrl = new URL(req.url, origin); // Preserves path and query params
   
   // Choose http or https based on origin protocol
   const client = originUrl.protocol === 'https:' ? https : http;
@@ -25,11 +26,11 @@ function forwardRequest(req, res, origin) {
   const options = {
     hostname: originUrl.hostname,
     port: originUrl.port || (originUrl.protocol === 'https:' ? 443 : 80),
-    path: targetUrl.pathname + targetUrl.search,
-    method: req.method, // Forward the exact HTTP method from client
+    path: targetUrl.pathname + targetUrl.search, // ✅ Preserves query parameters
+    method: req.method, // ✅ Preserves HTTP method (GET, POST, etc.)
     headers: {
-      ...req.headers,
-      host: originUrl.hostname // Override host header
+      ...req.headers, // ✅ Preserves all original headers (Content-Type, Authorization, custom headers, etc.)
+      host: originUrl.hostname // Override host header to match origin
     }
   };
   
@@ -53,7 +54,8 @@ function forwardRequest(req, res, origin) {
     res.end('Bad Gateway: Unable to reach origin server');
   });
   
-  // Forward request body if present
+  // ✅ Preserves request body using streaming (handles JSON, form data, binary, etc.)
+  // This works for all content types and efficiently handles large payloads
   req.pipe(proxyReq);
 }
 
