@@ -10,13 +10,14 @@ A CLI tool that starts a caching proxy server. It forwards requests to an actual
 - ✅ Stage 2: CLI argument parsing implemented
 - ⏳ Stage 3: Proxy server (Next)
 
-## Planned Features
+## Features
 
-- Forward HTTP requests to origin server
-- Cache responses for faster subsequent requests
-- Add `X-Cache` headers to indicate cache hits/misses
-- Clear cache functionality
-- Support all HTTP methods
+- ✅ Forward HTTP requests to origin server (HTTP & HTTPS)
+- ✅ Support all HTTP methods (GET, POST, PUT, PATCH, DELETE, etc.)
+- ✅ Preserve headers, query parameters, and request bodies
+- ⏳ Cache responses for faster subsequent requests (In Progress)
+- ⏳ Add `X-Cache` headers to indicate cache hits/misses (In Progress)
+- ⏳ Clear cache functionality (Coming Soon)
 
 ## Installation (Coming Soon)
 

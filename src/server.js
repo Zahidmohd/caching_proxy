@@ -21,11 +21,12 @@ function forwardRequest(req, res, origin) {
   const client = originUrl.protocol === 'https:' ? https : http;
   
   // Prepare request options
+  // Supports ALL HTTP methods: GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS, etc.
   const options = {
     hostname: originUrl.hostname,
     port: originUrl.port || (originUrl.protocol === 'https:' ? 443 : 80),
     path: targetUrl.pathname + targetUrl.search,
-    method: req.method,
+    method: req.method, // Forward the exact HTTP method from client
     headers: {
       ...req.headers,
       host: originUrl.hostname // Override host header

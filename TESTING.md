@@ -108,7 +108,55 @@ curl -i http://localhost:3002/products/1
 **Expected**: Status codes from origin are forwarded to client
 **Result**: ✅ PASS - HTTP 200 status code properly forwarded
 
+### ✅ Test 15: POST Method with JSON Body
+```bash
+curl -X POST -H "Content-Type: application/json" \
+  -d '{"title":"Test Product","price":99.99}' \
+  http://localhost:3000/products/add
+```
+**Expected**: POST request with body is forwarded correctly
+**Result**: ✅ PASS - Returns `{"id":195,"title":"Test Product","price":99.99}`
+**Server Log**: `📤 POST /products/add` → `📥 201 POST /products/add`
+
+### ✅ Test 16: PUT Method with JSON Body
+```bash
+curl -X PUT -H "Content-Type: application/json" \
+  -d '{"title":"Updated Product"}' \
+  http://localhost:3000/products/1
+```
+**Expected**: PUT request updates resource
+**Result**: ✅ PASS - Returns updated product data
+**Server Log**: `📤 PUT /products/1` → `📥 200 PUT /products/1`
+
+### ✅ Test 17: DELETE Method
+```bash
+curl -X DELETE http://localhost:3000/products/1
+```
+**Expected**: DELETE request is forwarded
+**Result**: ✅ PASS - Returns deleted product with `"isDeleted":true`
+**Server Log**: `📤 DELETE /products/1` → `📥 200 DELETE /products/1`
+
+### ✅ Test 18: PATCH Method
+```bash
+curl -X PATCH -H "Content-Type: application/json" \
+  -d '{"price":199.99}' \
+  http://localhost:3000/products/1
+```
+**Expected**: PATCH request partially updates resource
+**Result**: ✅ PASS - Returns product with updated price
+**Server Log**: `📤 PATCH /products/1` → `📥 200 PATCH /products/1`
+
+## HTTP Methods Summary
+
+All HTTP methods are supported:
+- ✅ GET (read)
+- ✅ POST (create)
+- ✅ PUT (update/replace)
+- ✅ PATCH (partial update)
+- ✅ DELETE (delete)
+- ✅ HEAD, OPTIONS, etc. (all methods forwarded)
+
 ## Next Testing Phase
 
-Stage 3 (continued) will add support for all HTTP methods and request body forwarding.
+Stage 4 will add caching mechanism (in-memory using Map).
 
