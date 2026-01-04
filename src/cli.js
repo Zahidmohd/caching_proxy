@@ -97,7 +97,13 @@ function clearCacheCommand() {
   const clearedCount = clearCache();
   
   console.log(`\n✅ Cache cleared successfully!`);
-  console.log(`   ${clearedCount} ${clearedCount === 1 ? 'entry' : 'entries'} removed\n`);
+  console.log(`   ${clearedCount} ${clearedCount === 1 ? 'entry' : 'entries'} removed`);
+  
+  // Show expired entries info if any
+  if (statsBefore.expiredRemoved > 0) {
+    console.log(`   (${statsBefore.expiredRemoved} expired entries auto-removed during stats check)`);
+  }
+  console.log();
 }
 
 module.exports = {

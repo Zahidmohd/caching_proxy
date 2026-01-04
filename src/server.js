@@ -82,12 +82,18 @@ function forwardRequest(req, res, origin) {
     proxyRes.on('end', () => {
       res.end();
       
-      // Store in cache (only if successful 2xx response)
+      // Check if request has authentication (don't cache authenticated requests)
+      const hasAuth = req.headers['authorization'] || req.headers['cookie'];
+      
+      // Check Cache-Control header from origin server
+      const cacheControl = proxyRes.headers['cache-control'];
+      
+      // Store in cache (only if successful 2xx response and not authenticated)
       setCachedResponse(req.method, fullUrl, {
         statusCode: proxyRes.statusCode,
         headers: proxyRes.headers, // Store original headers (without X-Cache)
         body: responseBody
-      });
+      }, hasAuth, cacheControl);
     });
   });
   

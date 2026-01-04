@@ -35,6 +35,10 @@ const path = require('path');
 const CACHE_DIR = path.join(__dirname, '..', 'cache');
 const CACHE_FILE = path.join(CACHE_DIR, 'cache-data.json');
 
+// Default cache TTL (Time To Live) in milliseconds
+// 5 minutes = 5 * 60 * 1000 = 300000ms
+const DEFAULT_CACHE_TTL = 5 * 60 * 1000;
+
 /**
  * Ensure cache directory exists
  */
@@ -129,12 +133,41 @@ function getCachedResponse(method, url) {
   const cached = cache.get(key);
   
   if (cached) {
+    // Check if cache entry has expired
+    if (cached.expiresAt && Date.now() > cached.expiresAt) {
+      console.log(`⏱️  Cache EXPIRED: ${key}`);
+      // Remove expired entry
+      cache.delete(key);
+      saveCache(cache);
+      return null;
+    }
     console.log(`✨ Cache HIT: ${key}`);
+    return cached;
   } else {
     console.log(`❌ Cache MISS: ${key}`);
+    return null;
+  }
+}
+
+/**
+ * Check if response should be cached based on Cache-Control header
+ * @param {string} cacheControl - Cache-Control header value
+ * @returns {boolean} - True if cacheable, false otherwise
+ */
+function isCacheable(cacheControl) {
+  if (!cacheControl) return true; // No Cache-Control = cacheable
+  
+  const lowerCaseControl = cacheControl.toLowerCase();
+  
+  // Don't cache if any of these directives are present
+  const noCacheDirectives = ['no-store', 'no-cache', 'private'];
+  for (const directive of noCacheDirectives) {
+    if (lowerCaseControl.includes(directive)) {
+      return false;
+    }
   }
   
-  return cached || null;
+  return true; // Cacheable (includes max-age, public, etc.)
 }
 
 /**
@@ -145,7 +178,9 @@ function getCachedResponse(method, url) {
  * @param {number} responseData.statusCode - HTTP status code (e.g., 200, 404)
  * @param {Object} responseData.headers - Response headers object (all headers from origin)
  * @param {string} responseData.body - Response body as string (complete body content)
- * @returns {boolean} - True if response was cached, false if not (due to non-2xx status)
+ * @param {boolean} hasAuth - Whether request has authentication (Authorization header or cookies)
+ * @param {string} cacheControl - Cache-Control header from origin server
+ * @returns {boolean} - True if response was cached, false if not
  * 
  * Example responseData structure:
  * {
@@ -162,15 +197,30 @@ function getCachedResponse(method, url) {
  * }
  * 
  * Caching Strategy:
- *   ✅ CACHED: 2xx responses (200, 201, 202, 203, 204, etc.)
+ *   ✅ CACHED: GET requests with 2xx responses, no authentication, respects Cache-Control
+ *   ❌ NOT CACHED: Non-GET methods (POST, PUT, DELETE, PATCH)
+ *   ❌ NOT CACHED: Authenticated requests (Authorization header or cookies)
+ *   ❌ NOT CACHED: Cache-Control: no-store, no-cache, or private
  *   ❌ NOT CACHED: 3xx redirects (301, 302, 307, etc.)
  *   ❌ NOT CACHED: 4xx client errors (404, 400, 401, etc.)
  *   ❌ NOT CACHED: 5xx server errors (500, 502, 503, etc.)
  */
-function setCachedResponse(method, url, responseData) {
+function setCachedResponse(method, url, responseData, hasAuth = false, cacheControl = null) {
   // Only cache GET requests (standard HTTP caching practice)
   if (method.toUpperCase() !== 'GET') {
     console.log(`⏭️  NOT cached (method ${method}): ${method}:${url}`);
+    return false;
+  }
+  
+  // Don't cache authenticated requests (security best practice)
+  if (hasAuth) {
+    console.log(`⏭️  NOT cached (authenticated request): ${method}:${url}`);
+    return false;
+  }
+  
+  // Respect Cache-Control header from origin server
+  if (!isCacheable(cacheControl)) {
+    console.log(`⏭️  NOT cached (Cache-Control: ${cacheControl}): ${method}:${url}`);
     return false;
   }
   
@@ -182,9 +232,19 @@ function setCachedResponse(method, url, responseData) {
   
   const key = generateCacheKey(method, url);
   const cache = loadCache();
-  cache.set(key, responseData);
+  
+  // Add expiration timestamp to cache entry
+  const cacheEntry = {
+    ...responseData,
+    cachedAt: Date.now(),
+    expiresAt: Date.now() + DEFAULT_CACHE_TTL
+  };
+  
+  cache.set(key, cacheEntry);
   saveCache(cache);
-  console.log(`💾 Cached: ${key} (${cache.size} total entries)`);
+  
+  const ttlMinutes = Math.floor(DEFAULT_CACHE_TTL / 60000);
+  console.log(`💾 Cached: ${key} (TTL: ${ttlMinutes}min, ${cache.size} total entries)`);
   return true;
 }
 
@@ -209,14 +269,31 @@ function clearCache() {
 }
 
 /**
- * Get cache statistics
- * @returns {Object} - Cache stats (size, keys)
+ * Get cache statistics (and clean up expired entries)
+ * @returns {Object} - Cache stats (size, keys, expired count)
  */
 function getCacheStats() {
   const cache = loadCache();
+  let expiredCount = 0;
+  const now = Date.now();
+  
+  // Remove expired entries
+  for (const [key, value] of cache.entries()) {
+    if (value.expiresAt && now > value.expiresAt) {
+      cache.delete(key);
+      expiredCount++;
+    }
+  }
+  
+  // Save cache if we removed any expired entries
+  if (expiredCount > 0) {
+    saveCache(cache);
+  }
+  
   return {
     size: cache.size,
-    keys: Array.from(cache.keys())
+    keys: Array.from(cache.keys()),
+    expiredRemoved: expiredCount
   };
 }
 

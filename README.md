@@ -86,15 +86,22 @@ curl -X PUT -H "Content-Type: application/json" \
 ### Caching Strategy
 
 **What Gets Cached:**
+- ✅ Only **GET requests** (standard HTTP practice)
 - ✅ Only successful responses (status codes 200-299)
+- ✅ Only **non-authenticated** requests (no Authorization header or cookies)
+- ✅ Only when origin allows (respects Cache-Control headers)
 - ✅ Complete response: status code, headers, and body
-- ✅ Separate cache entries for different HTTP methods
+- ✅ With **5-minute TTL** (auto-expires after 300 seconds)
 - ✅ Query parameters are part of the cache key
 
 **What Doesn't Get Cached:**
+- ❌ Non-GET methods (POST, PUT, DELETE, PATCH, etc.)
+- ❌ Authenticated requests (Authorization header or cookies present)
+- ❌ Responses with `Cache-Control: no-store`, `no-cache`, or `private`
 - ❌ Client errors (4xx) - 404, 401, 403, etc.
 - ❌ Server errors (5xx) - 500, 502, 503, etc.
 - ❌ Redirects (3xx) - 301, 302, 307, etc.
+- ❌ Expired entries (older than 5 minutes)
 
 ### Cache Key Format
 
@@ -117,7 +124,11 @@ Examples:
   - Request body (JSON, form data, binary) via streaming
   - HTTP methods and status codes
 - ✅ **Smart Caching:**
+  - Only cache GET requests (not POST, PUT, DELETE)
   - Only cache 2xx responses
+  - Avoid authenticated requests (no Authorization/cookies)
+  - Respect Cache-Control headers (no-store, no-cache, private)
+  - 5-minute TTL with auto-expiration
   - File-based persistent storage (`cache/cache-data.json`)
   - Method and URL specific caching
   - Query parameter aware
