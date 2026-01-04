@@ -40,10 +40,12 @@ function forwardRequest(req, res, origin) {
   const proxyReq = client.request(options, (proxyRes) => {
     console.log(`📥 ${proxyRes.statusCode} ${req.method} ${targetUrl.pathname}${targetUrl.search}`);
     
-    // Forward status code and headers from origin
+    // ✅ Forward ALL response headers from origin server
+    // This includes: content-type, cache-control, etag, server, CORS headers, 
+    // security headers, rate-limit headers, and all custom headers
     res.writeHead(proxyRes.statusCode, proxyRes.headers);
     
-    // Pipe the response from origin to client
+    // ✅ Pipe the complete response body from origin to client
     proxyRes.pipe(res);
   });
   
