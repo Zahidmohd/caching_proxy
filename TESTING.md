@@ -240,7 +240,61 @@ All proxy forwarding functionality is working:
 - ✅ Request preservation (headers, query params, body)
 - ✅ Response forwarding (status, headers, body)
 
+## Stage 4 Tests - Caching Mechanism
+
+### ✅ Test 25: Cache Key Generation - Basic URL
+```bash
+node test-cache-keys.js
+```
+**Input**: `GET https://dummyjson.com/products/1`
+**Key**: `GET:https://dummyjson.com/products/1`
+**Result**: ✅ PASS - Simple, readable format
+
+### ✅ Test 26: Cache Key with Query Parameters
+**Input**: `GET https://dummyjson.com/products?limit=10&skip=5`
+**Key**: `GET:https://dummyjson.com/products?limit=10&skip=5`
+**Result**: ✅ PASS - Query params automatically included
+
+### ✅ Test 27: Different Query Params = Different Keys
+**Keys**: 
+- `GET:https://dummyjson.com/products?limit=10`
+- `GET:https://dummyjson.com/products?limit=20`
+**Result**: ✅ PASS - Keys are different (correct behavior)
+
+### ✅ Test 28: Different HTTP Methods = Different Keys
+**Same URL, different methods**:
+- `GET:https://dummyjson.com/products/1`
+- `POST:https://dummyjson.com/products/1`
+- `PUT:https://dummyjson.com/products/1`
+**Result**: ✅ PASS - All keys are unique
+
+### ✅ Test 29: Method Case Normalization
+**Input**: `get`, `GET`, `Get`
+**All normalize to**: `GET:https://dummyjson.com/products/1`
+**Result**: ✅ PASS - Case-insensitive method handling
+
+## Cache Key Strategy Summary
+
+**Format**: `METHOD:URL`
+
+**Benefits**:
+- ✅ Simple and human-readable
+- ✅ Unique for each request combination
+- ✅ Automatically includes query parameters
+- ✅ Method-aware (GET vs POST cached separately)
+- ✅ Case-insensitive method handling
+- ✅ Efficient for Map lookups
+
+**Examples**:
+```
+GET:https://dummyjson.com/products/1
+GET:https://dummyjson.com/products?limit=10&skip=5
+POST:https://dummyjson.com/products/add
+PUT:https://dummyjson.com/products/1
+DELETE:https://dummyjson.com/products/1
+```
+
 ## Next Testing Phase
 
-Stage 4 will add caching mechanism (in-memory using Map).
+Stage 4 (continued) will add cache storage and retrieval functionality.
 
