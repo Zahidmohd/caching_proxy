@@ -56,7 +56,30 @@ node src/index.js --version
 | No arguments | ✅ PASS | Shows usage guide |
 | Version flag | ✅ PASS | Shows version |
 
+## Stage 3 Tests - HTTP Server
+
+### ✅ Test 8: Server Starts and Listens
+```bash
+node src/index.js --port 3000 --origin http://dummyjson.com
+```
+**Expected**: Server starts and listens on port 3000
+**Result**: ✅ PASS - Server running successfully
+
+### ✅ Test 9: Server Responds to Requests
+```bash
+curl http://localhost:3000/test
+```
+**Expected**: Server responds with acknowledgment message
+**Result**: ✅ PASS - Returns "Proxy server received: GET /test"
+
+### ✅ Test 10: Server Handles Different Endpoints
+```bash
+curl http://localhost:3000/products
+```
+**Expected**: Server responds to any endpoint
+**Result**: ✅ PASS - Responds correctly
+
 ## Next Testing Phase
 
-Stage 3 will add actual proxy server tests with real HTTP requests.
+Stage 3 (continued) will add request forwarding to the origin server.
 

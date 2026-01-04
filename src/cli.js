@@ -3,6 +3,8 @@
  * Handles the main CLI commands with validation
  */
 
+const { createProxyServer } = require('./server');
+
 /**
  * Validate port number
  * @param {string|number} port - Port number to validate
@@ -62,8 +64,8 @@ function startServer(port, origin) {
   console.log(`   Origin: ${validOrigin}`);
   console.log('');
   
-  // TODO: Implement server start logic in Stage 3
-  console.log('⏳ Server implementation coming in Stage 3...\n');
+  // Create and start the proxy server
+  createProxyServer(validPort, validOrigin);
 }
 
 /**
