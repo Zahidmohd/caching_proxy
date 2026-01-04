@@ -27,6 +27,17 @@
 const cache = new Map();
 
 /**
+ * Check if a status code indicates a successful response that should be cached
+ * @param {number} statusCode - HTTP status code
+ * @returns {boolean} - True if status code is in the 2xx range (successful)
+ */
+function shouldCacheResponse(statusCode) {
+  // Cache only successful responses (2xx status codes)
+  // 200 OK, 201 Created, 202 Accepted, 203 Non-Authoritative, 204 No Content, etc.
+  return statusCode >= 200 && statusCode < 300;
+}
+
+/**
  * Generate a unique cache key based on request details
  * Format: METHOD:URL (including query parameters)
  * 
@@ -77,17 +88,18 @@ function getCachedResponse(method, url) {
 }
 
 /**
- * Store a response in cache
+ * Store a response in cache (only if it's a successful response)
  * @param {string} method - HTTP method
  * @param {string} url - Complete URL
  * @param {Object} responseData - Response data to cache
  * @param {number} responseData.statusCode - HTTP status code (e.g., 200, 404)
  * @param {Object} responseData.headers - Response headers object (all headers from origin)
  * @param {string} responseData.body - Response body as string (complete body content)
+ * @returns {boolean} - True if response was cached, false if not (due to non-2xx status)
  * 
  * Example responseData structure:
  * {
- *   statusCode: 200,                           // Any HTTP status (2xx, 3xx, 4xx, 5xx)
+ *   statusCode: 200,                           // Only 2xx status codes will be cached
  *   headers: {                                 // ALL headers from origin server
  *     'content-type': 'application/json',
  *     'cache-control': 'max-age=3600',
@@ -99,15 +111,23 @@ function getCachedResponse(method, url) {
  *   body: '{"id":1,"title":"Product",...}'    // Complete response body
  * }
  * 
- * What gets cached:
- *   ✅ Status Code: Exact HTTP status code from origin
- *   ✅ Headers: ALL response headers (standard, security, CORS, custom)
- *   ✅ Body: Complete response body content (JSON, HTML, text, binary)
+ * Caching Strategy:
+ *   ✅ CACHED: 2xx responses (200, 201, 202, 203, 204, etc.)
+ *   ❌ NOT CACHED: 3xx redirects (301, 302, 307, etc.)
+ *   ❌ NOT CACHED: 4xx client errors (404, 400, 401, etc.)
+ *   ❌ NOT CACHED: 5xx server errors (500, 502, 503, etc.)
  */
 function setCachedResponse(method, url, responseData) {
+  // Only cache successful responses (2xx status codes)
+  if (!shouldCacheResponse(responseData.statusCode)) {
+    console.log(`⏭️  NOT cached (status ${responseData.statusCode}): ${method}:${url}`);
+    return false;
+  }
+  
   const key = generateCacheKey(method, url);
   cache.set(key, responseData);
   console.log(`💾 Cached: ${key} (${cache.size} total entries)`);
+  return true;
 }
 
 /**
@@ -136,6 +156,7 @@ module.exports = {
   getCachedResponse,
   setCachedResponse,
   clearCache,
-  getCacheStats
+  getCacheStats,
+  shouldCacheResponse
 };
 

@@ -467,6 +467,84 @@ node test-response-storage.js
 - ✅ Data types maintained (number, object, string)
 - ✅ No data loss or corruption
 
+### ✅ Test 45: Cache Policy - shouldCacheResponse Function
+```bash
+node test-cache-policy.js
+```
+**Status codes tested**: 18 different codes (2xx, 3xx, 4xx, 5xx)
+**Expected**: Only 2xx returns true
+**Result**: ✅ PASS - All 18 status codes correctly evaluated
+
+### ✅ Test 46: Caching 2xx Successful Responses
+**Responses tested**: 200, 201, 204
+**Expected**: All cached successfully
+**Result**: ✅ PASS - 3 responses cached, cache size = 3
+
+### ✅ Test 47: NOT Caching Non-2xx Responses
+**Responses tested**: 301, 404, 500, 400
+**Expected**: None cached, cache size unchanged
+**Result**: ✅ PASS - 0 cached, cache size remains 3
+
+### ✅ Test 48: Error Responses Not Retrievable
+**Attempted retrievals**: 404, 500
+**Expected**: Both return null (cache miss)
+**Result**: ✅ PASS - Both not found in cache
+
+### ✅ Test 49: Cache Contents Verification
+**Expected**: Only 2xx responses in cache
+**Result**: ✅ PASS - All 3 cached responses are 2xx
+
+### ✅ Test 50: Edge Cases (Boundary Testing)
+**Codes tested**: 199, 200, 250, 299, 300
+**Expected**: Only 200-299 cached
+**Result**: ✅ PASS - Boundaries correctly handled
+
+## Cache Policy Summary
+
+**Caching Strategy**:
+```
+✅ CACHE:       2xx (200-299) - Successful responses
+❌ DON'T CACHE: 3xx (300-399) - Redirects
+❌ DON'T CACHE: 4xx (400-499) - Client errors  
+❌ DON'T CACHE: 5xx (500-599) - Server errors
+```
+
+**Status Codes Tested**:
+
+| Code | Name | Cached? | Result |
+|------|------|---------|--------|
+| 200 | OK | ✅ Yes | PASS |
+| 201 | Created | ✅ Yes | PASS |
+| 202 | Accepted | ✅ Yes | PASS |
+| 204 | No Content | ✅ Yes | PASS |
+| 206 | Partial Content | ✅ Yes | PASS |
+| 301 | Moved Permanently | ❌ No | PASS |
+| 302 | Found | ❌ No | PASS |
+| 304 | Not Modified | ❌ No | PASS |
+| 400 | Bad Request | ❌ No | PASS |
+| 401 | Unauthorized | ❌ No | PASS |
+| 403 | Forbidden | ❌ No | PASS |
+| 404 | Not Found | ❌ No | PASS |
+| 429 | Too Many Requests | ❌ No | PASS |
+| 500 | Internal Server Error | ❌ No | PASS |
+| 502 | Bad Gateway | ❌ No | PASS |
+| 503 | Service Unavailable | ❌ No | PASS |
+| 504 | Gateway Timeout | ❌ No | PASS |
+
+**Benefits**:
+- ✅ Prevents caching of errors
+- ✅ Prevents caching of redirects
+- ✅ Only stores valid, successful responses
+- ✅ Saves memory by not caching failures
+- ✅ Ensures fresh attempts for failed requests
+
+**Implementation**:
+```javascript
+function shouldCacheResponse(statusCode) {
+  return statusCode >= 200 && statusCode < 300;
+}
+```
+
 ## Next Testing Phase
 
 Stage 5 will integrate caching with the proxy server and add X-Cache headers.
