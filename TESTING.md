@@ -805,7 +805,94 @@ All cache integration features implemented:
 - ✅ Cache check before forwarding requests
 - ✅ Immediate response from cache (no origin delay)
 
+## Stage 6 Tests - Clear Cache Feature
+
+### ✅ Test 66: File-Based Cache Creation
+```bash
+# Make requests to populate cache
+curl http://localhost:3000/products/1
+ls cache/
+```
+**Expected**: `cache-data.json` file created
+**Result**: ✅ PASS - File created with 12KB of cached data
+
+### ✅ Test 67: Clear Cache Command
+```bash
+node src/index.js --clear-cache
+```
+**Expected**: Cache cleared with confirmation message
+**Result**: ✅ PASS
+```
+🧹 Clearing cache...
+   Current cache size: 3 entries
+
+   Cached entries:
+     1. GET:https://dummyjson.com/products/1
+     2. GET:https://dummyjson.com/products/2
+     3. GET:https://dummyjson.com/products?limit=3
+
+✅ Cache cleared successfully!
+   3 entries removed
+```
+
+### ✅ Test 68: Cache File Deleted
+```bash
+ls cache/
+```
+**Expected**: `cache-data.json` file deleted
+**Result**: ✅ PASS - File removed, directory empty
+
+### ✅ Test 69: Requests After Clear (MISS)
+```bash
+curl -i http://localhost:3000/products/1 | grep "x-cache:"
+```
+**Expected**: `x-cache: MISS` (cache was cleared)
+**Result**: ✅ PASS - Shows MISS
+
+### ✅ Test 70: Caching Still Works After Clear
+```bash
+curl -i http://localhost:3000/products/1 | grep "x-cache:"  # Second request
+```
+**Expected**: `x-cache: HIT` (re-cached)
+**Result**: ✅ PASS - Shows HIT
+
+## Clear Cache Implementation
+
+**File-Based Storage**:
+- Cache stored in `cache/cache-data.json`
+- JSON format for easy inspection
+- Persistent across server runs
+- Shared between server and --clear-cache command
+
+**Cache Functions**:
+```javascript
+loadCache()    // Read cache from file
+saveCache()    // Write cache to file
+clearCache()   // Delete cache file
+```
+
+**Clear Cache Command**:
+```bash
+caching-proxy --clear-cache
+```
+
+**Features**:
+- ✅ Shows cache size before clearing
+- ✅ Lists cached entries (first 5 + count)
+- ✅ Deletes cache file
+- ✅ Confirms successful clearing
+- ✅ Handles empty cache gracefully
+
+## Stage 6 Complete ✅
+
+All clear cache features implemented:
+- ✅ File-based persistent cache storage
+- ✅ --clear-cache command
+- ✅ User-friendly output
+- ✅ Cache statistics display
+- ✅ Proper file deletion
+
 ## Next Testing Phase
 
-Stage 6 will implement the --clear-cache command functionality.
+Stage 7 will add comprehensive testing and documentation.
 

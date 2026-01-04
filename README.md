@@ -11,7 +11,7 @@ A CLI tool that starts a caching proxy server. It forwards requests to an actual
 - ✅ Stage 3: Proxy server with request/response forwarding
 - ✅ Stage 4: Caching mechanism complete
   - ✅ Cache key generation strategy (METHOD:URL)
-  - ✅ In-memory storage (Map)
+  - ✅ File-based persistent storage
   - ✅ Response data storage (status code, headers, body)
   - ✅ Cache policy (only 2xx responses)
   - ✅ Cache retrieval logic
@@ -20,7 +20,11 @@ A CLI tool that starts a caching proxy server. It forwards requests to an actual
   - ✅ X-Cache: HIT header when serving from cache
   - ✅ X-Cache: MISS header when fetching from origin
   - ✅ Response caching after origin fetch
-- ⏳ Stage 6: Clear cache feature (Next)
+- ✅ Stage 6: Clear cache feature complete
+  - ✅ File-based cache storage (cache/cache-data.json)
+  - ✅ --clear-cache command
+  - ✅ User-friendly output and confirmation
+- ⏳ Stage 7: Testing & Documentation (Next)
 
 ## Features
 
@@ -39,7 +43,10 @@ A CLI tool that starts a caching proxy server. It forwards requests to an actual
 - ✅ **Cache Indicators:**
   - `X-Cache: HIT` - Response served from cache
   - `X-Cache: MISS` - Response fetched from origin
-- ⏳ Clear cache functionality (Coming Soon)
+- ✅ **Clear Cache Command:**
+  - `--clear-cache` to remove all cached entries
+  - File-based persistent storage
+  - User-friendly confirmation messages
 
 ## Installation (Coming Soon)
 

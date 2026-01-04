@@ -4,6 +4,7 @@
  */
 
 const { createProxyServer } = require('./server');
+const { clearCache, getCacheStats } = require('./cache');
 
 /**
  * Validate port number
@@ -71,16 +72,37 @@ function startServer(port, origin) {
 /**
  * Clear the cache
  */
-function clearCache() {
+function clearCacheCommand() {
   console.log('\n🧹 Clearing cache...');
   
-  // TODO: Implement cache clearing logic in Stage 6
-  console.log('⏳ Cache clearing implementation coming in Stage 6...\n');
+  // Get stats before clearing
+  const statsBefore = getCacheStats();
+  console.log(`   Current cache size: ${statsBefore.size} entries`);
+  
+  if (statsBefore.size === 0) {
+    console.log('   Cache is already empty.\n');
+    return;
+  }
+  
+  // Show what's being cleared
+  console.log('\n   Cached entries:');
+  statsBefore.keys.slice(0, 5).forEach((key, index) => {
+    console.log(`     ${index + 1}. ${key}`);
+  });
+  if (statsBefore.size > 5) {
+    console.log(`     ... and ${statsBefore.size - 5} more`);
+  }
+  
+  // Clear the cache
+  const clearedCount = clearCache();
+  
+  console.log(`\n✅ Cache cleared successfully!`);
+  console.log(`   ${clearedCount} ${clearedCount === 1 ? 'entry' : 'entries'} removed\n`);
 }
 
 module.exports = {
   startServer,
-  clearCache,
+  clearCache: clearCacheCommand,
   validatePort,
   validateOrigin
 };

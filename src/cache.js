@@ -1,6 +1,6 @@
 /**
  * Cache Module
- * Handles in-memory caching using JavaScript Map
+ * Handles file-based caching for persistence across processes
  * 
  * Cache Key Strategy:
  * -------------------
@@ -20,11 +20,60 @@
  *   ✅ Unique for each request (method + URL + query params)
  *   ✅ Query parameters automatically included in URL
  *   ✅ Different methods cached separately (GET vs POST)
- *   ✅ Efficient for JavaScript Map lookups
+ *   ✅ Efficient for lookups
+ * 
+ * Storage:
+ *   ✅ File-based (cache/cache-data.json)
+ *   ✅ Persistent across process restarts
+ *   ✅ Can be cleared by --clear-cache command
  */
 
-// In-memory cache storage
-const cache = new Map();
+const fs = require('fs');
+const path = require('path');
+
+// Cache file path
+const CACHE_DIR = path.join(__dirname, '..', 'cache');
+const CACHE_FILE = path.join(CACHE_DIR, 'cache-data.json');
+
+/**
+ * Ensure cache directory exists
+ */
+function ensureCacheDir() {
+  if (!fs.existsSync(CACHE_DIR)) {
+    fs.mkdirSync(CACHE_DIR, { recursive: true });
+  }
+}
+
+/**
+ * Load cache from file
+ * @returns {Map} - Cache map
+ */
+function loadCache() {
+  try {
+    if (fs.existsSync(CACHE_FILE)) {
+      const data = fs.readFileSync(CACHE_FILE, 'utf8');
+      const obj = JSON.parse(data);
+      return new Map(Object.entries(obj));
+    }
+  } catch (error) {
+    console.error('Error loading cache:', error.message);
+  }
+  return new Map();
+}
+
+/**
+ * Save cache to file
+ * @param {Map} cache - Cache map to save
+ */
+function saveCache(cache) {
+  try {
+    ensureCacheDir();
+    const obj = Object.fromEntries(cache);
+    fs.writeFileSync(CACHE_FILE, JSON.stringify(obj, null, 2), 'utf8');
+  } catch (error) {
+    console.error('Error saving cache:', error.message);
+  }
+}
 
 /**
  * Check if a status code indicates a successful response that should be cached
@@ -76,6 +125,7 @@ function generateCacheKey(method, url) {
  */
 function getCachedResponse(method, url) {
   const key = generateCacheKey(method, url);
+  const cache = loadCache();
   const cached = cache.get(key);
   
   if (cached) {
@@ -125,7 +175,9 @@ function setCachedResponse(method, url, responseData) {
   }
   
   const key = generateCacheKey(method, url);
+  const cache = loadCache();
   cache.set(key, responseData);
+  saveCache(cache);
   console.log(`💾 Cached: ${key} (${cache.size} total entries)`);
   return true;
 }
@@ -135,8 +187,18 @@ function setCachedResponse(method, url, responseData) {
  * @returns {number} - Number of entries cleared
  */
 function clearCache() {
+  const cache = loadCache();
   const size = cache.size;
-  cache.clear();
+  
+  // Delete the cache file
+  try {
+    if (fs.existsSync(CACHE_FILE)) {
+      fs.unlinkSync(CACHE_FILE);
+    }
+  } catch (error) {
+    console.error('Error deleting cache file:', error.message);
+  }
+  
   return size;
 }
 
@@ -145,6 +207,7 @@ function clearCache() {
  * @returns {Object} - Cache stats (size, keys)
  */
 function getCacheStats() {
+  const cache = loadCache();
   return {
     size: cache.size,
     keys: Array.from(cache.keys())
