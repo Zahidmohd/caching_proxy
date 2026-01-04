@@ -83,7 +83,6 @@ function forwardRequest(req, res, origin) {
       res.end();
       
       // Store in cache (only if successful 2xx response)
-      const fullUrl = `${origin}${req.url}`;
       setCachedResponse(req.method, fullUrl, {
         statusCode: proxyRes.statusCode,
         headers: proxyRes.headers, // Store original headers (without X-Cache)
