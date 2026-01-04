@@ -168,6 +168,12 @@ function getCachedResponse(method, url) {
  *   ❌ NOT CACHED: 5xx server errors (500, 502, 503, etc.)
  */
 function setCachedResponse(method, url, responseData) {
+  // Only cache GET requests (standard HTTP caching practice)
+  if (method.toUpperCase() !== 'GET') {
+    console.log(`⏭️  NOT cached (method ${method}): ${method}:${url}`);
+    return false;
+  }
+  
   // Only cache successful responses (2xx status codes)
   if (!shouldCacheResponse(responseData.statusCode)) {
     console.log(`⏭️  NOT cached (status ${responseData.statusCode}): ${method}:${url}`);
