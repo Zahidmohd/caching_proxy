@@ -9,12 +9,16 @@ A CLI tool that starts a caching proxy server. It forwards requests to an actual
 - ✅ Stage 1: Project setup complete
 - ✅ Stage 2: CLI argument parsing implemented
 - ✅ Stage 3: Proxy server with request/response forwarding
-- ⏳ Stage 4: Caching mechanism (Almost complete)
-  - ✅ Cache key generation strategy
+- ✅ Stage 4: Caching mechanism complete
+  - ✅ Cache key generation strategy (METHOD:URL)
   - ✅ In-memory storage (Map)
   - ✅ Response data storage (status code, headers, body)
   - ✅ Cache policy (only 2xx responses)
-  - ⏳ Integration with proxy server (Next)
+  - ✅ Cache retrieval logic
+- ⏳ Stage 5: Cache integration with proxy (In Progress)
+  - ✅ X-Cache: MISS header when fetching from origin
+  - ✅ Response caching after origin fetch
+  - ⏳ X-Cache: HIT header when serving from cache (Next)
 
 ## Features
 

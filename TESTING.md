@@ -545,7 +545,166 @@ function shouldCacheResponse(statusCode) {
 }
 ```
 
+### ✅ Test 51: Basic Cache Retrieval
+```bash
+node test-cache-retrieval.js
+```
+**Action**: Store and retrieve a response
+**Expected**: Exact match of statusCode, headers, body
+**Result**: ✅ PASS - All components match
+
+### ✅ Test 52: Cache Miss Handling
+**Action**: Retrieve non-existent entry
+**Expected**: Returns null
+**Result**: ✅ PASS - Returns null correctly
+
+### ✅ Test 53: Method-Specific Retrieval
+**Action**: Store GET and POST to same URL, retrieve each
+**Expected**: Correct responses for each method
+**Result**: ✅ PASS - GET and POST retrieved correctly
+
+### ✅ Test 54: Query Parameter Sensitivity
+**Action**: Store responses for ?limit=10 and ?limit=20
+**Expected**: Each returns correct response
+**Result**: ✅ PASS - Query params distinguished correctly
+
+### ✅ Test 55: Case-Insensitive Method Retrieval
+**Action**: Retrieve with "get", "GET", "Get"
+**Expected**: All return same cached response
+**Result**: ✅ PASS - All cases work, same object returned
+
+### ✅ Test 56: Complete Structure Retrieval
+**Action**: Retrieve complex response with nested objects
+**Expected**: Full structure preserved (statusCode, headers, body)
+**Result**: ✅ PASS - Complete structure intact
+
+### ✅ Test 57: Multiple Retrievals (Efficiency)
+**Action**: Retrieve same entry 5 times
+**Expected**: All successful, fast O(1) lookups
+**Result**: ✅ PASS - All 5 retrievals successful
+
+### ✅ Test 58: Retrieval From Large Cache
+**Action**: Store 5 items, retrieve specific ones
+**Expected**: Correct items retrieved
+**Result**: ✅ PASS - Items 1, 3, 5 retrieved correctly
+
+## Cache Retrieval Logic Summary
+
+**Function**: `getCachedResponse(method, url)`
+
+**Parameters**:
+- `method`: HTTP method (string) - case-insensitive
+- `url`: Complete URL (string) - including query parameters
+
+**Returns**:
+- **Cache HIT**: `{ statusCode: number, headers: object, body: string }`
+- **Cache MISS**: `null`
+
+**Features**:
+```javascript
+// Basic retrieval
+const cached = getCachedResponse('GET', 'https://api.com/products/1');
+if (cached) {
+  // Cache HIT
+  console.log(cached.statusCode);  // 200
+  console.log(cached.headers);     // { 'content-type': '...', ... }
+  console.log(cached.body);        // '{"id":1,...}'
+} else {
+  // Cache MISS - fetch from origin
+}
+```
+
+**Capabilities**:
+1. ✅ **Fast Lookups**: O(1) Map-based retrieval
+2. ✅ **Method-Aware**: GET and POST cached separately
+3. ✅ **Query-Aware**: Different query params = different cache entries
+4. ✅ **Case-Insensitive**: Method normalization (GET, get, Get all work)
+5. ✅ **Complete Data**: Returns full response object
+6. ✅ **Null on Miss**: Clean handling of non-existent entries
+7. ✅ **Logging**: Logs HIT/MISS for debugging
+8. ✅ **Efficient**: Multiple retrievals don't degrade performance
+
+**Retrieval Examples**:
+```javascript
+// Same URL, different methods
+getCachedResponse('GET', 'https://api.com/data')   // GET response
+getCachedResponse('POST', 'https://api.com/data')  // POST response
+
+// Same URL, different query params
+getCachedResponse('GET', 'https://api.com/data?limit=10')  // Limit 10
+getCachedResponse('GET', 'https://api.com/data?limit=20')  // Limit 20
+
+// Case variations (all work)
+getCachedResponse('get', 'https://api.com/data')
+getCachedResponse('GET', 'https://api.com/data')
+getCachedResponse('Get', 'https://api.com/data')
+```
+
+## Stage 4 Complete ✅
+
+All caching mechanism features implemented and tested:
+- ✅ Cache key generation (50 tests total)
+- ✅ In-memory storage (Map)
+- ✅ Response data storage (statusCode, headers, body)
+- ✅ Cache policy (only 2xx)
+- ✅ **Cache retrieval logic (8 tests)**
+
+## Stage 5 Tests - Cache Headers & Integration
+
+### ✅ Test 59: X-Cache MISS Header on First Request
+```bash
+curl -i http://localhost:3000/products/1 | grep "x-cache:"
+```
+**Expected**: `x-cache: MISS` header present
+**Result**: ✅ PASS - X-Cache: MISS header added
+
+### ✅ Test 60: X-Cache MISS with Query Parameters
+```bash
+curl -i "http://localhost:3000/products?limit=3" | grep "x-cache:"
+```
+**Expected**: `x-cache: MISS` header present
+**Result**: ✅ PASS - X-Cache: MISS header added
+
+### ✅ Test 61: Response Cached After MISS
+**Server logs show**:
+```
+📤 GET /products/1
+📥 200 GET /products/1
+💾 Cached: GET:https://dummyjson.com/products/1 (1 total entries)
+```
+**Expected**: Response stored in cache after fetching from origin
+**Result**: ✅ PASS - Response cached successfully
+
+## X-Cache MISS Implementation
+
+**What happens on cache MISS**:
+1. ✅ Request forwarded to origin server
+2. ✅ Response received from origin
+3. ✅ **`X-Cache: MISS` header added to response**
+4. ✅ Response forwarded to client with MISS header
+5. ✅ Response stored in cache (if 2xx status code)
+
+**Headers sent to client**:
+```
+HTTP/1.1 200 OK
+date: Sun, 04 Jan 2026 17:29:29 GMT
+content-type: application/json; charset=utf-8
+...all original headers from origin...
+x-cache: MISS        ← Added by proxy
+```
+
+**Code implementation**:
+```javascript
+// Add X-Cache: MISS header
+const responseHeaders = {
+  ...proxyRes.headers,
+  'x-cache': 'MISS'
+};
+
+res.writeHead(proxyRes.statusCode, responseHeaders);
+```
+
 ## Next Testing Phase
 
-Stage 5 will integrate caching with the proxy server and add X-Cache headers.
+Stage 5 (continued) will add X-Cache HIT header when serving from cache.
 

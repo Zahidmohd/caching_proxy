@@ -6,6 +6,7 @@
 const http = require('http');
 const https = require('https');
 const { URL } = require('url');
+const { getCachedResponse, setCachedResponse } = require('./cache');
 
 /**
  * Forward request to origin server
@@ -40,13 +41,34 @@ function forwardRequest(req, res, origin) {
   const proxyReq = client.request(options, (proxyRes) => {
     console.log(`📥 ${proxyRes.statusCode} ${req.method} ${targetUrl.pathname}${targetUrl.search}`);
     
-    // ✅ Forward ALL response headers from origin server
-    // This includes: content-type, cache-control, etag, server, CORS headers, 
-    // security headers, rate-limit headers, and all custom headers
-    res.writeHead(proxyRes.statusCode, proxyRes.headers);
+    // ✅ Add X-Cache: MISS header to indicate response is from origin server
+    const responseHeaders = {
+      ...proxyRes.headers,
+      'x-cache': 'MISS'
+    };
     
-    // ✅ Pipe the complete response body from origin to client
-    proxyRes.pipe(res);
+    // Forward status code and headers (including X-Cache: MISS)
+    res.writeHead(proxyRes.statusCode, responseHeaders);
+    
+    // Collect response body to store in cache
+    let responseBody = '';
+    
+    proxyRes.on('data', (chunk) => {
+      responseBody += chunk;
+      res.write(chunk); // Forward to client
+    });
+    
+    proxyRes.on('end', () => {
+      res.end();
+      
+      // Store in cache (only if successful 2xx response)
+      const fullUrl = `${origin}${req.url}`;
+      setCachedResponse(req.method, fullUrl, {
+        statusCode: proxyRes.statusCode,
+        headers: proxyRes.headers, // Store original headers (without X-Cache)
+        body: responseBody
+      });
+    });
   });
   
   // Handle errors
