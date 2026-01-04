@@ -55,10 +55,25 @@ function generateCacheKey(method, url) {
  * @param {string} method - HTTP method
  * @param {string} url - Complete URL
  * @returns {Object|null} - Cached response object or null if not found
+ * 
+ * Returns null if cache miss, otherwise returns:
+ * {
+ *   statusCode: number,
+ *   headers: Object,
+ *   body: string
+ * }
  */
 function getCachedResponse(method, url) {
   const key = generateCacheKey(method, url);
-  return cache.get(key) || null;
+  const cached = cache.get(key);
+  
+  if (cached) {
+    console.log(`✨ Cache HIT: ${key}`);
+  } else {
+    console.log(`❌ Cache MISS: ${key}`);
+  }
+  
+  return cached || null;
 }
 
 /**
@@ -66,10 +81,21 @@ function getCachedResponse(method, url) {
  * @param {string} method - HTTP method
  * @param {string} url - Complete URL
  * @param {Object} responseData - Response data to cache
+ * @param {number} responseData.statusCode - HTTP status code (e.g., 200, 404)
+ * @param {Object} responseData.headers - Response headers object
+ * @param {string} responseData.body - Response body as string
+ * 
+ * Example responseData:
+ * {
+ *   statusCode: 200,
+ *   headers: { 'content-type': 'application/json', 'cache-control': 'max-age=3600' },
+ *   body: '{"id":1,"title":"Product"}'
+ * }
  */
 function setCachedResponse(method, url, responseData) {
   const key = generateCacheKey(method, url);
   cache.set(key, responseData);
+  console.log(`💾 Cached: ${key} (${cache.size} total entries)`);
 }
 
 /**

@@ -294,7 +294,99 @@ PUT:https://dummyjson.com/products/1
 DELETE:https://dummyjson.com/products/1
 ```
 
+### ✅ Test 30: Initial Cache State
+```bash
+node test-cache-storage.js
+```
+**Expected**: Empty cache (size = 0)
+**Result**: ✅ PASS - Cache starts empty
+
+### ✅ Test 31: Store Response in Cache
+**Action**: Store a mock response with status, headers, body
+**Expected**: Cache size = 1
+**Result**: ✅ PASS - Response successfully stored
+
+### ✅ Test 32: Retrieve Cached Response
+**Action**: Retrieve previously stored response
+**Expected**: Returns complete response object
+**Result**: ✅ PASS - Retrieved with statusCode, headers, body
+
+### ✅ Test 33: Cache Miss
+**Action**: Request non-existent cache entry
+**Expected**: Returns null
+**Result**: ✅ PASS - Properly handles cache misses
+
+### ✅ Test 34: Store Multiple Responses
+**Action**: Store 3 different responses
+**Expected**: Cache size = 3, all retrievable
+**Result**: ✅ PASS - All entries stored and retrievable
+
+### ✅ Test 35: Method Differentiation
+**Action**: Store GET and POST to same URL
+**Expected**: Cached separately (2 entries)
+**Result**: ✅ PASS - GET and POST cached independently
+
+### ✅ Test 36: Overwrite Existing Entry
+**Action**: Store new response with same key
+**Expected**: Old response replaced with new
+**Result**: ✅ PASS - Cache entry properly updated
+
+### ✅ Test 37: Cache Statistics
+**Action**: Get cache size and keys
+**Expected**: Accurate count and key list
+**Result**: ✅ PASS - Statistics correctly reported
+
+### ✅ Test 38: Clear Cache
+**Action**: Clear all cache entries
+**Expected**: Cache size = 0
+**Result**: ✅ PASS - All 6 entries cleared
+
+### ✅ Test 39: Cache After Clear
+**Action**: Store response after clearing
+**Expected**: Cache works normally
+**Result**: ✅ PASS - Cache functional after clear
+
+## In-Memory Cache Storage Summary
+
+**Storage**: JavaScript `Map` object
+**Key Format**: `METHOD:URL`
+
+**Functions Tested**:
+```javascript
+// Store response
+setCachedResponse(method, url, responseData)
+
+// Retrieve response (returns null if not found)
+getCachedResponse(method, url)
+
+// Clear all cache (returns count of cleared entries)
+clearCache()
+
+// Get statistics (size and keys)
+getCacheStats()
+```
+
+**Response Data Structure**:
+```javascript
+{
+  statusCode: 200,
+  headers: { 'content-type': 'application/json', ... },
+  body: '{"id":1,"title":"Product",...}'
+}
+```
+
+**Features Verified**:
+- ✅ Store responses in memory (Map)
+- ✅ Retrieve cached responses
+- ✅ Handle cache misses (return null)
+- ✅ Store multiple entries
+- ✅ Separate caching by HTTP method
+- ✅ Overwrite existing entries
+- ✅ Get cache statistics
+- ✅ Clear all cache
+- ✅ Continue working after clear
+
 ## Next Testing Phase
 
-Stage 4 (continued) will add cache storage and retrieval functionality.
+Stage 4 (continued) will integrate caching with the proxy server.
 
