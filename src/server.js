@@ -9,7 +9,7 @@ const { URL } = require('url');
 const { getCachedResponse, setCachedResponse } = require('./cache');
 
 /**
- * Forward request to origin server
+ * Forward request to origin server (or serve from cache if available)
  * Preserves: headers, query parameters, request body, and HTTP method
  * @param {http.IncomingMessage} req - Incoming request
  * @param {http.ServerResponse} res - Response object
@@ -18,6 +18,29 @@ const { getCachedResponse, setCachedResponse } = require('./cache');
 function forwardRequest(req, res, origin) {
   const originUrl = new URL(origin);
   const targetUrl = new URL(req.url, origin); // Preserves path and query params
+  const fullUrl = `${origin}${req.url}`;
+  
+  // ✅ Check cache first
+  const cached = getCachedResponse(req.method, fullUrl);
+  
+  if (cached) {
+    // Cache HIT - serve from cache
+    console.log(`✨ Serving from cache: ${req.method} ${targetUrl.pathname}${targetUrl.search}`);
+    
+    // Add X-Cache: HIT header
+    const cachedHeaders = {
+      ...cached.headers,
+      'x-cache': 'HIT'
+    };
+    
+    // Send cached response to client
+    res.writeHead(cached.statusCode, cachedHeaders);
+    res.end(cached.body);
+    return;
+  }
+  
+  // Cache MISS - forward to origin
+  console.log(`📤 ${req.method} ${targetUrl.pathname}${targetUrl.search}`);
   
   // Choose http or https based on origin protocol
   const client = originUrl.protocol === 'https:' ? https : http;
@@ -34,8 +57,6 @@ function forwardRequest(req, res, origin) {
       host: originUrl.hostname // Override host header to match origin
     }
   };
-  
-  console.log(`📤 ${req.method} ${targetUrl.pathname}${targetUrl.search}`);
   
   // Forward the request to origin server
   const proxyReq = client.request(options, (proxyRes) => {

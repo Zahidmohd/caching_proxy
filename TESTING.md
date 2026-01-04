@@ -704,7 +704,108 @@ const responseHeaders = {
 res.writeHead(proxyRes.statusCode, responseHeaders);
 ```
 
+### ✅ Test 62: X-Cache HIT on Second Request
+```bash
+# First request
+curl -i http://localhost:3000/products/1 | grep "x-cache:"
+# Second request to same endpoint
+curl -i http://localhost:3000/products/1 | grep "x-cache:"
+```
+**Expected**: First = MISS, Second = HIT
+**Result**: ✅ PASS
+- First request: `x-cache: MISS`
+- Second request: `x-cache: HIT`
+
+### ✅ Test 63: Multiple Cache HITs
+```bash
+# Third request to same endpoint
+curl -i http://localhost:3000/products/1 | grep "x-cache:"
+```
+**Expected**: `x-cache: HIT`
+**Result**: ✅ PASS - Still serving from cache
+
+### ✅ Test 64: Cache HIT/MISS for Different Endpoints
+```bash
+curl -i http://localhost:3000/products/2 | grep "x-cache:"  # MISS
+curl -i http://localhost:3000/products/2 | grep "x-cache:"  # HIT
+```
+**Expected**: First = MISS, Second = HIT for different URL
+**Result**: ✅ PASS - Each endpoint cached independently
+
+### ✅ Test 65: Cache HIT with Query Parameters
+```bash
+curl -i "http://localhost:3000/products?limit=3" | grep "x-cache:"  # MISS
+curl -i "http://localhost:3000/products?limit=3" | grep "x-cache:"  # HIT
+```
+**Expected**: First = MISS, Second = HIT with query params
+**Result**: ✅ PASS - Query parameters handled correctly
+
+## X-Cache HIT Implementation
+
+**Server Logs**:
+```
+❌ Cache MISS: GET:https://dummyjson.com/products/1
+📤 GET /products/1
+📥 200 GET /products/1
+💾 Cached: GET:https://dummyjson.com/products/1 (1 total entries)
+
+✨ Cache HIT: GET:https://dummyjson.com/products/1
+✨ Serving from cache: GET /products/1
+```
+
+**Request Flow**:
+
+**Cache MISS Flow**:
+1. ✅ Check cache → Not found
+2. ✅ Log "Cache MISS"
+3. ✅ Forward to origin server
+4. ✅ Receive response
+5. ✅ Add `X-Cache: MISS` header
+6. ✅ Forward to client
+7. ✅ Store in cache
+
+**Cache HIT Flow**:
+1. ✅ Check cache → Found!
+2. ✅ Log "Cache HIT" and "Serving from cache"
+3. ✅ Add `X-Cache: HIT` header to cached response
+4. ✅ Send to client immediately (no origin request)
+
+**Code Implementation**:
+```javascript
+// Check cache first
+const cached = getCachedResponse(req.method, fullUrl);
+
+if (cached) {
+  // Cache HIT - serve from cache
+  const cachedHeaders = {
+    ...cached.headers,
+    'x-cache': 'HIT'
+  };
+  
+  res.writeHead(cached.statusCode, cachedHeaders);
+  res.end(cached.body);
+  return;
+}
+
+// Cache MISS - forward to origin (existing flow)
+```
+
+**Benefits**:
+- ✅ Fast responses (no origin server request)
+- ✅ Reduced load on origin server
+- ✅ Clear indication via X-Cache header
+- ✅ All cached data preserved (status, headers, body)
+
+## Stage 5 Complete ✅
+
+All cache integration features implemented:
+- ✅ X-Cache: MISS header when fetching from origin
+- ✅ Response caching after origin fetch
+- ✅ **X-Cache: HIT header when serving from cache**
+- ✅ Cache check before forwarding requests
+- ✅ Immediate response from cache (no origin delay)
+
 ## Next Testing Phase
 
-Stage 5 (continued) will add X-Cache HIT header when serving from cache.
+Stage 6 will implement the --clear-cache command functionality.
 

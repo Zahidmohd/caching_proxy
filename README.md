@@ -15,10 +15,12 @@ A CLI tool that starts a caching proxy server. It forwards requests to an actual
   - ✅ Response data storage (status code, headers, body)
   - ✅ Cache policy (only 2xx responses)
   - ✅ Cache retrieval logic
-- ⏳ Stage 5: Cache integration with proxy (In Progress)
+- ✅ Stage 5: Cache integration with proxy complete
+  - ✅ Check cache before forwarding requests
+  - ✅ X-Cache: HIT header when serving from cache
   - ✅ X-Cache: MISS header when fetching from origin
   - ✅ Response caching after origin fetch
-  - ⏳ X-Cache: HIT header when serving from cache (Next)
+- ⏳ Stage 6: Clear cache feature (Next)
 
 ## Features
 
@@ -29,8 +31,14 @@ A CLI tool that starts a caching proxy server. It forwards requests to an actual
   - All request headers (Content-Type, Authorization, custom headers)
   - Request body (JSON, form data, binary, etc.) via streaming
   - HTTP method and status codes
-- ⏳ Cache responses for faster subsequent requests (In Progress)
-- ⏳ Add `X-Cache` headers to indicate cache hits/misses (In Progress)
+- ✅ **Smart Caching:**
+  - Cache successful responses (2xx status codes)
+  - In-memory storage using Map
+  - Separate caching per HTTP method and URL
+  - Query parameter aware
+- ✅ **Cache Indicators:**
+  - `X-Cache: HIT` - Response served from cache
+  - `X-Cache: MISS` - Response fetched from origin
 - ⏳ Clear cache functionality (Coming Soon)
 
 ## Installation (Coming Soon)
