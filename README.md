@@ -12,6 +12,7 @@ A CLI tool that starts a caching proxy server. It forwards requests to an actual
 - ⏳ Stage 4: Caching mechanism (In Progress)
   - ✅ Cache key generation strategy
   - ✅ In-memory storage (Map)
+  - ✅ Response data storage (status code, headers, body)
   - ⏳ Integration with proxy server (Next)
 
 ## Features

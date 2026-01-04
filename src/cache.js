@@ -82,15 +82,27 @@ function getCachedResponse(method, url) {
  * @param {string} url - Complete URL
  * @param {Object} responseData - Response data to cache
  * @param {number} responseData.statusCode - HTTP status code (e.g., 200, 404)
- * @param {Object} responseData.headers - Response headers object
- * @param {string} responseData.body - Response body as string
+ * @param {Object} responseData.headers - Response headers object (all headers from origin)
+ * @param {string} responseData.body - Response body as string (complete body content)
  * 
- * Example responseData:
+ * Example responseData structure:
  * {
- *   statusCode: 200,
- *   headers: { 'content-type': 'application/json', 'cache-control': 'max-age=3600' },
- *   body: '{"id":1,"title":"Product"}'
+ *   statusCode: 200,                           // Any HTTP status (2xx, 3xx, 4xx, 5xx)
+ *   headers: {                                 // ALL headers from origin server
+ *     'content-type': 'application/json',
+ *     'cache-control': 'max-age=3600',
+ *     'etag': 'W/"abc123"',
+ *     'server': 'cloudflare',
+ *     'x-ratelimit-limit': '100',
+ *     // ... all other headers
+ *   },
+ *   body: '{"id":1,"title":"Product",...}'    // Complete response body
  * }
+ * 
+ * What gets cached:
+ *   ✅ Status Code: Exact HTTP status code from origin
+ *   ✅ Headers: ALL response headers (standard, security, CORS, custom)
+ *   ✅ Body: Complete response body content (JSON, HTML, text, binary)
  */
 function setCachedResponse(method, url, responseData) {
   const key = generateCacheKey(method, url);

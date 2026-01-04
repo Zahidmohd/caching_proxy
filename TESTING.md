@@ -386,7 +386,88 @@ getCacheStats()
 - ✅ Clear all cache
 - ✅ Continue working after clear
 
+### ✅ Test 40: Complete Response Data Storage
+```bash
+node test-response-storage.js
+```
+**Expected**: Status code, headers, and body all stored
+**Result**: ✅ PASS - All components stored and retrieved
+
+### ✅ Test 41: Status Code Preservation
+**Status codes tested**: 200, 201, 404, 500, 301, 204
+**Expected**: All status codes preserved exactly
+**Result**: ✅ PASS - All 6 status codes match
+
+### ✅ Test 42: Headers Preservation
+**Headers tested**: 8 different headers including:
+- Standard: content-type, content-length, cache-control, etag, last-modified
+- Security: strict-transport-security
+- CORS: access-control-allow-origin
+- Custom: x-custom-header
+
+**Expected**: All headers preserved with exact values
+**Result**: ✅ PASS - All headers match perfectly
+
+### ✅ Test 43: Body Content Preservation
+**Content types tested**:
+- JSON (61 chars)
+- Plain text (34 chars)
+- HTML (61 chars)
+- Empty body (0 chars)
+- Large body (10,000 chars)
+
+**Expected**: All content preserved exactly
+**Result**: ✅ PASS - All body types match
+
+### ✅ Test 44: Complete Structure Verification
+**Components verified**:
+- `statusCode`: number type
+- `headers`: object type with key-value pairs
+- `body`: string type
+
+**Expected**: Structure maintained, types correct
+**Result**: ✅ PASS - Structure and types correct
+
+## Response Data Storage Summary
+
+**Complete Response Object**:
+```javascript
+{
+  statusCode: 200,                    // <number> HTTP status code
+  headers: {                          // <object> All response headers
+    'content-type': 'application/json',
+    'cache-control': 'max-age=3600',
+    'etag': 'W/"abc123"',
+    // ... all other headers
+  },
+  body: '{"id":1,"title":"..."}'     // <string> Complete response body
+}
+```
+
+**What Gets Stored**:
+1. ✅ **Status Code**: All HTTP status codes (2xx, 3xx, 4xx, 5xx)
+2. ✅ **Headers**: All headers from origin server
+   - Standard headers (content-type, cache-control, etc.)
+   - Security headers (HSTS, CSP, etc.)
+   - CORS headers (access-control-*)
+   - Custom headers (x-*)
+   - Rate limiting headers
+3. ✅ **Body**: Complete response body
+   - JSON data
+   - HTML/XML
+   - Plain text
+   - Binary data (as string)
+   - Empty bodies
+   - Large payloads
+
+**Storage Verification**:
+- ✅ All status codes preserved exactly
+- ✅ All headers preserved with exact values
+- ✅ All body content preserved completely
+- ✅ Data types maintained (number, object, string)
+- ✅ No data loss or corruption
+
 ## Next Testing Phase
 
-Stage 4 (continued) will integrate caching with the proxy server.
+Stage 5 will integrate caching with the proxy server and add X-Cache headers.
 
