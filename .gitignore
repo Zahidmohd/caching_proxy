@@ -1,6 +1,7 @@
 # Dependencies
 node_modules/
 PROJECT_PLAN.md
+TESTING.md
 
 # Cache files
 cache/

@@ -5,6 +5,11 @@ A CLI tool that starts a caching proxy server. It forwards requests to an actual
 ## Status
 🚧 **Under Development** - See [PROJECT_PLAN.md](PROJECT_PLAN.md) for implementation stages
 
+### Current Progress
+- ✅ Stage 1: Project setup complete
+- ✅ Stage 2: CLI argument parsing implemented
+- ⏳ Stage 3: Proxy server (Next)
+
 ## Planned Features
 
 - Forward HTTP requests to origin server
