@@ -6,7 +6,7 @@
 const http = require('http');
 const https = require('https');
 const { URL } = require('url');
-const { getCachedResponse, setCachedResponse, getCacheStats } = require('./cache');
+const { getCachedResponse, setCachedResponse, getCacheStats, configureCacheLimits } = require('./cache');
 const { getStats } = require('./analytics');
 const logger = require('./logger');
 
@@ -225,6 +225,60 @@ function handleMetricsEndpoint(req, res, origin) {
 }
 
 /**
+ * Handle liveness probe endpoint for Kubernetes
+ * Returns 200 if the server process is running
+ * @param {http.IncomingMessage} req - Request
+ * @param {http.ServerResponse} res - Response
+ */
+function handleLivenessCheck(req, res) {
+  // Liveness check - just indicates the server is running
+  // If this endpoint responds, the process is alive
+  res.writeHead(200, {
+    'Content-Type': 'application/json',
+    'Cache-Control': 'no-cache, no-store, must-revalidate'
+  });
+  res.end(JSON.stringify({
+    status: 'alive',
+    timestamp: new Date().toISOString()
+  }));
+}
+
+/**
+ * Handle readiness probe endpoint for Kubernetes
+ * Returns 200 if the server is ready to accept traffic
+ * @param {http.IncomingMessage} req - Request
+ * @param {http.ServerResponse} res - Response
+ * @param {string} origin - Origin server URL
+ */
+async function handleReadinessCheck(req, res, origin) {
+  // Readiness check - indicates if the server can handle requests
+  // Check if origin is reachable
+  const originReachable = await checkOriginReachability(origin);
+  
+  if (originReachable) {
+    res.writeHead(200, {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-cache, no-store, must-revalidate'
+    });
+    res.end(JSON.stringify({
+      status: 'ready',
+      timestamp: new Date().toISOString()
+    }));
+  } else {
+    // Not ready - origin is unreachable
+    res.writeHead(503, {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-cache, no-store, must-revalidate'
+    });
+    res.end(JSON.stringify({
+      status: 'not ready',
+      reason: 'origin server unreachable',
+      timestamp: new Date().toISOString()
+    }));
+  }
+}
+
+/**
  * Forward request to origin server (or serve from cache if available)
  * Preserves: headers, query parameters, request body, and HTTP method
  * @param {http.IncomingMessage} req - Incoming request
@@ -365,6 +419,15 @@ function forwardRequest(req, res, origin) {
  * @returns {http.Server} - HTTP server instance
  */
 function createProxyServer(port, origin, config = null) {
+  // Configure cache limits if config provided
+  if (config && config.cache) {
+    configureCacheLimits({
+      maxEntries: config.cache.maxEntries,
+      maxSizeMB: config.cache.maxSizeMB
+    });
+    console.log(`💾 Cache limits: ${config.cache.maxEntries} entries, ${config.cache.maxSizeMB} MB`);
+  }
+  
   // Configure logger if config provided
   if (config && config.logging) {
     if (config.logging.level) {
@@ -387,6 +450,18 @@ function createProxyServer(port, origin, config = null) {
     // Handle metrics endpoint (Prometheus format)
     if (req.url === '/__metrics') {
       handleMetricsEndpoint(req, res, origin);
+      return;
+    }
+    
+    // Handle liveness probe (Kubernetes)
+    if (req.url === '/__live') {
+      handleLivenessCheck(req, res);
+      return;
+    }
+    
+    // Handle readiness probe (Kubernetes)
+    if (req.url === '/__ready') {
+      await handleReadinessCheck(req, res, origin);
       return;
     }
     

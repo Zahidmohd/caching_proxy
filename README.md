@@ -9,6 +9,7 @@ A high-performance CLI tool that creates a caching proxy server to speed up your
 - 🔄 **Cache Indicators** - Clear `X-Cache: HIT/MISS` headers
 - 🧹 **Easy Management** - Simple `--clear-cache` command
 - 📦 **File-Based Storage** - Persistent cache across restarts
+- 🗑️ **LRU Eviction** - Automatic cleanup when cache limits reached
 - 🌐 **Full HTTP Support** - Works with all HTTP methods
 - 🔒 **Header Preservation** - All original headers maintained
 
@@ -114,6 +115,36 @@ Examples:
 - POST:https://dummyjson.com/products/add
 ```
 
+### LRU (Least Recently Used) Eviction
+
+The cache automatically manages its size to prevent unlimited growth:
+
+**How It Works:**
+1. Each cache entry tracks its `lastAccessTime`
+2. When cache exceeds limits (entries or size), oldest entries are evicted
+3. Eviction targets 90% of limits to avoid constant cleanup
+4. All eviction events are logged to `logs/cache.log`
+
+**Default Limits:**
+- **Max Entries**: 1,000 cache entries
+- **Max Size**: 100 MB total cache size
+
+**Configuration:**
+```json
+{
+  "cache": {
+    "maxEntries": 1000,
+    "maxSizeMB": 100
+  }
+}
+```
+
+**Example Log Output:**
+```
+🗑️  LRU Eviction: Removed 2 entries (Cache: 998 entries, 98.5 MB)
+💾 Cached: GET:https://api.com/data (TTL: 5min, 998 entries, 98.5 MB) [Evicted 2]
+```
+
 ## ✨ Features
 
 - ✅ **Proxy Forwarding:** HTTP & HTTPS origin servers supported
@@ -129,6 +160,7 @@ Examples:
   - Avoid authenticated requests (no Authorization/cookies)
   - Respect Cache-Control headers (no-store, no-cache, private)
   - 5-minute TTL with auto-expiration
+  - LRU eviction (max 1000 entries, 100 MB by default)
   - File-based persistent storage (`cache/cache-data.json`)
   - Method and URL specific caching
   - Query parameter aware
@@ -248,7 +280,11 @@ caching-proxy --version
 |----------|-------------|----------|---------|
 | `--port <number>` | Port for proxy server | Yes* | `--port 3000` |
 | `--origin <url>` | Origin server URL | Yes* | `--origin https://api.com` |
+| `--config <path>` | Load configuration from file | No | `--config proxy.config.json` |
 | `--clear-cache` | Clear all cached entries | No | `--clear-cache` |
+| `--cache-stats` | Display cache statistics | No | `--cache-stats` |
+| `--cache-list` | List all cached URLs | No | `--cache-list` |
+| `--log-level <level>` | Set log level (debug/info/warn/error) | No | `--log-level debug` |
 | `--help` | Show help message | No | `--help` |
 | `--version` | Show version number | No | `--version` |
 
@@ -270,6 +306,43 @@ caching-proxy --version
   - ❌ `dummyjson.com` (missing protocol)
   - ❌ `ftp://example.com` (wrong protocol)
 
+### Configuration File
+
+Use `--config <path>` to load settings from a JSON file:
+
+```bash
+caching-proxy --config proxy.config.json
+```
+
+**Example Configuration:**
+```json
+{
+  "server": {
+    "port": 3000,
+    "origin": "https://dummyjson.com"
+  },
+  "cache": {
+    "defaultTTL": 300,
+    "maxEntries": 1000,
+    "maxSizeMB": 100
+  },
+  "logging": {
+    "level": "info",
+    "format": "text"
+  }
+}
+```
+
+**Cache Configuration Options:**
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `defaultTTL` | number | 300 | Cache TTL in seconds (5 minutes) |
+| `maxEntries` | number | 1000 | Maximum number of cache entries |
+| `maxSizeMB` | number | 100 | Maximum cache size in megabytes |
+
+When cache limits are reached, the **LRU (Least Recently Used)** eviction policy automatically removes the oldest entries.
+
 ## 🗂️ Project Structure
 
 ```
@@ -278,13 +351,24 @@ caching-proxy/
 │   ├── index.js          # Entry point & CLI setup
 │   ├── cli.js            # Command handlers & validation
 │   ├── server.js         # Proxy server & request forwarding
-│   ├── cache.js          # Cache storage & retrieval
+│   ├── cache.js          # Cache storage & retrieval (with LRU eviction)
+│   ├── analytics.js      # Cache analytics & statistics
+│   ├── logger.js         # Logging system (access, cache, error, performance)
+│   └── config.js         # Configuration file loader & validator
 ├── cache/                # Cache storage directory
-│   └── cache-data.json   # Cached responses (auto-generated)
+│   ├── cache-data.json   # Cached responses (auto-generated)
+│   └── analytics.json    # Analytics data (auto-generated)
+├── logs/                 # Log files directory
+│   ├── access.log        # Request/response logs
+│   ├── cache.log         # Cache hit/miss/eviction events
+│   ├── error.log         # Error logs
+│   └── performance.log   # Performance metrics
+├── doc/                  # Documentation
+│   ├── PROJECT_PLAN.md   # Development stages & progress
+│   └── CONFIG_DOCUMENTATION.md  # Configuration guide
+├── proxy.config.json     # Example configuration file
 ├── package.json          # Dependencies & scripts
 ├── README.md             # This file
-├── TESTING.md            # Test documentation
-├── PROJECT_PLAN.md       # Development stages
 └── .gitignore            # Git ignore rules
 ```
 

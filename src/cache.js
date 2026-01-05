@@ -40,6 +40,25 @@ const CACHE_FILE = path.join(CACHE_DIR, 'cache-data.json');
 // 5 minutes = 5 * 60 * 1000 = 300000ms
 const DEFAULT_CACHE_TTL = 5 * 60 * 1000;
 
+// Cache size limits (default values, can be overridden by config)
+let MAX_CACHE_ENTRIES = 1000; // Maximum number of cache entries
+let MAX_CACHE_SIZE_MB = 100;   // Maximum cache size in MB
+
+/**
+ * Configure cache limits
+ * @param {Object} options - Configuration options
+ * @param {number} options.maxEntries - Maximum number of entries
+ * @param {number} options.maxSizeMB - Maximum size in MB
+ */
+function configureCacheLimits(options = {}) {
+  if (options.maxEntries !== undefined) {
+    MAX_CACHE_ENTRIES = options.maxEntries;
+  }
+  if (options.maxSizeMB !== undefined) {
+    MAX_CACHE_SIZE_MB = options.maxSizeMB;
+  }
+}
+
 /**
  * Ensure cache directory exists
  */
@@ -147,6 +166,11 @@ function getCachedResponse(method, url, startTime = Date.now(), requestId = null
     const responseTime = Date.now() - startTime;
     console.log(`✨ Cache HIT: ${key}`);
     
+    // Update last access time for LRU tracking
+    cached.lastAccessTime = Date.now();
+    cache.set(key, cached);
+    saveCache(cache);
+    
     // Calculate data size from cached body
     const dataSize = cached.body ? Buffer.byteLength(cached.body, 'utf8') : 0;
     recordHit(key, responseTime, dataSize); // Record cache hit with timing and size
@@ -176,6 +200,88 @@ function getCachedResponse(method, url, startTime = Date.now(), requestId = null
     
     return null;
   }
+}
+
+/**
+ * Calculate cache size in bytes
+ * @param {Map} cache - Cache map
+ * @returns {number} - Total size in bytes
+ */
+function calculateCacheSize(cache) {
+  let totalSize = 0;
+  for (const [key, entry] of cache.entries()) {
+    // Calculate size of the entire entry (key + body + headers + metadata)
+    const keySize = Buffer.byteLength(key, 'utf8');
+    const bodySize = entry.body ? Buffer.byteLength(entry.body, 'utf8') : 0;
+    const headersSize = Buffer.byteLength(JSON.stringify(entry.headers || {}), 'utf8');
+    totalSize += keySize + bodySize + headersSize;
+  }
+  return totalSize;
+}
+
+/**
+ * Evict least recently used entries to stay within limits
+ * @param {Map} cache - Cache map
+ * @returns {number} - Number of entries evicted
+ */
+function evictLRU(cache) {
+  let evictedCount = 0;
+  
+  // Check if we need to evict based on entry count
+  const exceedsEntryLimit = cache.size > MAX_CACHE_ENTRIES;
+  
+  // Check if we need to evict based on size
+  const currentSizeBytes = calculateCacheSize(cache);
+  const currentSizeMB = currentSizeBytes / (1024 * 1024);
+  const exceedsSizeLimit = currentSizeMB > MAX_CACHE_SIZE_MB;
+  
+  if (!exceedsEntryLimit && !exceedsSizeLimit) {
+    return 0; // No eviction needed
+  }
+  
+  // Sort entries by lastAccessTime (oldest first)
+  const entries = Array.from(cache.entries());
+  entries.sort((a, b) => {
+    const timeA = a[1].lastAccessTime || a[1].cachedAt || 0;
+    const timeB = b[1].lastAccessTime || b[1].cachedAt || 0;
+    return timeA - timeB; // Ascending order (oldest first)
+  });
+  
+  // Evict entries until we're under both limits
+  // Keep evicting until we're at 90% of limits to avoid constant eviction
+  const targetEntries = Math.floor(MAX_CACHE_ENTRIES * 0.9);
+  const targetSizeMB = MAX_CACHE_SIZE_MB * 0.9;
+  
+  for (const [key, entry] of entries) {
+    // Check if we're now under limits
+    const currentSize = calculateCacheSize(cache);
+    const currentSizeMB = currentSize / (1024 * 1024);
+    
+    if (cache.size <= targetEntries && currentSizeMB <= targetSizeMB) {
+      break; // We're under both limits
+    }
+    
+    // Evict this entry
+    cache.delete(key);
+    evictedCount++;
+    
+    // Log eviction
+    const logger = require('./logger');
+    logger.logCache({
+      status: 'EVICTED',
+      key,
+      reason: 'LRU',
+      requestId: null
+    });
+  }
+  
+  if (evictedCount > 0) {
+    const newSize = calculateCacheSize(cache);
+    const newSizeMB = (newSize / (1024 * 1024)).toFixed(2);
+    console.log(`🗑️  LRU Eviction: Removed ${evictedCount} entries (Cache: ${cache.size} entries, ${newSizeMB} MB)`);
+  }
+  
+  return evictedCount;
 }
 
 /**
@@ -262,18 +368,32 @@ function setCachedResponse(method, url, responseData, hasAuth = false, cacheCont
   const key = generateCacheKey(method, url);
   const cache = loadCache();
   
-  // Add expiration timestamp to cache entry
+  // Add expiration timestamp and access time to cache entry
+  const now = Date.now();
   const cacheEntry = {
     ...responseData,
-    cachedAt: Date.now(),
-    expiresAt: Date.now() + DEFAULT_CACHE_TTL
+    cachedAt: now,
+    expiresAt: now + DEFAULT_CACHE_TTL,
+    lastAccessTime: now // Track for LRU eviction
   };
   
   cache.set(key, cacheEntry);
+  
+  // Evict LRU entries if cache exceeds limits
+  const evictedCount = evictLRU(cache);
+  
+  // Save cache after eviction
   saveCache(cache);
   
   const ttlMinutes = Math.floor(DEFAULT_CACHE_TTL / 60000);
-  console.log(`💾 Cached: ${key} (TTL: ${ttlMinutes}min, ${cache.size} total entries)`);
+  const cacheSize = calculateCacheSize(cache);
+  const cacheSizeMB = (cacheSize / (1024 * 1024)).toFixed(2);
+  
+  if (evictedCount > 0) {
+    console.log(`💾 Cached: ${key} (TTL: ${ttlMinutes}min, ${cache.size} entries, ${cacheSizeMB} MB) [Evicted ${evictedCount}]`);
+  } else {
+    console.log(`💾 Cached: ${key} (TTL: ${ttlMinutes}min, ${cache.size} entries, ${cacheSizeMB} MB)`);
+  }
   
   // Log performance metric
   const logger = require('./logger');
@@ -282,7 +402,7 @@ function setCachedResponse(method, url, responseData, hasAuth = false, cacheCont
     operation: 'cache-store',
     duration: 0,
     url,
-    meta: { size: dataSize, entries: cache.size },
+    meta: { size: dataSize, entries: cache.size, evicted: evictedCount },
     requestId
   });
   
@@ -344,6 +464,8 @@ module.exports = {
   setCachedResponse,
   clearCache,
   getCacheStats,
-  shouldCacheResponse
+  shouldCacheResponse,
+  configureCacheLimits,
+  calculateCacheSize
 };
 
