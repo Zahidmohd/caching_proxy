@@ -4,7 +4,7 @@
  */
 
 const { createProxyServer } = require('./server');
-const { clearCache, getCacheStats } = require('./cache');
+const { clearCache, clearCacheByPattern, getCacheStats } = require('./cache');
 const { getStats } = require('./analytics');
 const { displayConfigSummary } = require('./config');
 
@@ -111,6 +111,47 @@ function clearCacheCommand() {
   if (statsBefore.expiredRemoved > 0) {
     console.log(`   (${statsBefore.expiredRemoved} expired entries auto-removed during stats check)`);
   }
+  console.log();
+}
+
+/**
+ * Clear cache entries matching a pattern
+ * @param {string} pattern - Pattern with wildcards (e.g., "/products/*")
+ */
+function clearCachePatternCommand(pattern) {
+  console.log('\n🧹 Clearing cache entries matching pattern...');
+  console.log(`   Pattern: ${pattern}`);
+  
+  // Get stats before clearing
+  const statsBefore = getCacheStats();
+  console.log(`   Current cache size: ${statsBefore.size} entries`);
+  
+  if (statsBefore.size === 0) {
+    console.log('   Cache is already empty.\n');
+    return;
+  }
+  
+  // Clear cache by pattern
+  const result = clearCacheByPattern(pattern);
+  
+  if (result.cleared === 0) {
+    console.log(`\n⚠️  No cache entries matched the pattern "${pattern}"`);
+    console.log();
+    return;
+  }
+  
+  // Show what was cleared
+  console.log(`\n   Cleared entries:`);
+  result.keys.slice(0, 5).forEach((key, index) => {
+    console.log(`     ${index + 1}. ${key}`);
+  });
+  if (result.cleared > 5) {
+    console.log(`     ... and ${result.cleared - 5} more`);
+  }
+  
+  console.log(`\n✅ Cache cleared successfully!`);
+  console.log(`   ${result.cleared} ${result.cleared === 1 ? 'entry' : 'entries'} removed`);
+  console.log(`   ${statsBefore.size - result.cleared} entries remaining`);
   console.log();
 }
 
@@ -312,6 +353,7 @@ function showCacheList() {
 module.exports = {
   startServer,
   clearCache: clearCacheCommand,
+  clearCachePattern: clearCachePatternCommand,
   showCacheStats,
   showCacheList,
   validatePort,

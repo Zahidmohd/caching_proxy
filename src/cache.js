@@ -192,6 +192,46 @@ function getTTLForURL(url) {
 }
 
 /**
+ * Determine TTL for a cache entry based on priority order
+ * Priority: Cache-Control max-age > Custom Pattern Config > Default TTL
+ * 
+ * @param {string} url - Full URL
+ * @param {string} cacheControl - Cache-Control header value from origin
+ * @returns {number} - TTL in milliseconds
+ * 
+ * Priority Order:
+ * 1. Cache-Control max-age (if present and valid)
+ * 2. Custom pattern-based TTL (if URL matches a pattern)
+ * 3. Default TTL (fallback)
+ * 
+ * Examples:
+ *   // Cache-Control has priority
+ *   determineTTL("https://api.com/products/1", "max-age=7200")
+ *     => 7200000 (2 hours from Cache-Control)
+ *   
+ *   // Pattern config used when no max-age
+ *   determineTTL("https://api.com/products/1", "public")
+ *     => 600000 (10 minutes if /products/* configured for 600s)
+ *   
+ *   // Default used when no max-age and no pattern match
+ *   determineTTL("https://api.com/unknown", null)
+ *     => 300000 (5 minutes default)
+ */
+function determineTTL(url, cacheControl) {
+  // Priority 1: Check Cache-Control max-age
+  const maxAgeTTL = extractTTLFromCacheControl(cacheControl);
+  if (maxAgeTTL !== null) {
+    return maxAgeTTL;
+  }
+  
+  // Priority 2: Check custom pattern-based TTL
+  const patternTTL = getTTLForURL(url);
+  return patternTTL;
+  
+  // Priority 3 is handled inside getTTLForURL() which returns DEFAULT_CACHE_TTL if no pattern matches
+}
+
+/**
  * Ensure cache directory exists
  */
 function ensureCacheDir() {
@@ -500,12 +540,15 @@ function setCachedResponse(method, url, responseData, hasAuth = false, cacheCont
   const key = generateCacheKey(method, url);
   const cache = loadCache();
   
+  // Determine TTL based on priority: Cache-Control > Custom Config > Default
+  const ttl = determineTTL(url, cacheControl);
+  
   // Add expiration timestamp and access time to cache entry
   const now = Date.now();
   const cacheEntry = {
     ...responseData,
     cachedAt: now,
-    expiresAt: now + DEFAULT_CACHE_TTL,
+    expiresAt: now + ttl,
     lastAccessTime: now // Track for LRU eviction
   };
   
@@ -517,14 +560,18 @@ function setCachedResponse(method, url, responseData, hasAuth = false, cacheCont
   // Save cache after eviction
   saveCache(cache);
   
-  const ttlMinutes = Math.floor(DEFAULT_CACHE_TTL / 60000);
+  const ttlSeconds = Math.floor(ttl / 1000);
+  const ttlMinutes = Math.floor(ttl / 60000);
   const cacheSize = calculateCacheSize(cache);
   const cacheSizeMB = (cacheSize / (1024 * 1024)).toFixed(2);
   
+  // Display TTL in appropriate units
+  const ttlDisplay = ttlMinutes > 0 ? `${ttlMinutes}min` : `${ttlSeconds}s`;
+  
   if (evictedCount > 0) {
-    console.log(`💾 Cached: ${key} (TTL: ${ttlMinutes}min, ${cache.size} entries, ${cacheSizeMB} MB) [Evicted ${evictedCount}]`);
+    console.log(`💾 Cached: ${key} (TTL: ${ttlDisplay}, ${cache.size} entries, ${cacheSizeMB} MB) [Evicted ${evictedCount}]`);
   } else {
-    console.log(`💾 Cached: ${key} (TTL: ${ttlMinutes}min, ${cache.size} entries, ${cacheSizeMB} MB)`);
+    console.log(`💾 Cached: ${key} (TTL: ${ttlDisplay}, ${cache.size} entries, ${cacheSizeMB} MB)`);
   }
   
   // Log performance metric
@@ -562,6 +609,53 @@ function clearCache() {
 }
 
 /**
+ * Clear cache entries matching a pattern
+ * @param {string} pattern - Pattern with wildcards (e.g., "/products/*", "/api/**")
+ * @returns {Object} - { cleared: number, keys: Array<string> }
+ */
+function clearCacheByPattern(pattern) {
+  const cache = loadCache();
+  const keysToRemove = [];
+  
+  // Iterate through cache entries
+  for (const [key, value] of cache.entries()) {
+    // Key format is "METHOD:URL"
+    // Extract URL from the key
+    const colonIndex = key.indexOf(':');
+    if (colonIndex === -1) continue;
+    
+    const url = key.substring(colonIndex + 1);
+    
+    try {
+      // Extract path from URL
+      const urlObj = new URL(url);
+      const urlPath = urlObj.pathname;
+      
+      // Check if URL matches the pattern
+      if (matchPattern(pattern, urlPath)) {
+        keysToRemove.push(key);
+      }
+    } catch (error) {
+      // Skip entries with invalid URLs
+      continue;
+    }
+  }
+  
+  // Remove matched entries
+  keysToRemove.forEach(key => cache.delete(key));
+  
+  // Save cache
+  if (keysToRemove.length > 0) {
+    saveCache(cache);
+  }
+  
+  return {
+    cleared: keysToRemove.length,
+    keys: keysToRemove
+  };
+}
+
+/**
  * Get cache statistics (and clean up expired entries)
  * @returns {Object} - Cache stats (size, keys, expired count)
  */
@@ -595,6 +689,7 @@ module.exports = {
   getCachedResponse,
   setCachedResponse,
   clearCache,
+  clearCacheByPattern,
   getCacheStats,
   shouldCacheResponse,
   configureCacheLimits,
@@ -602,6 +697,7 @@ module.exports = {
   matchPattern,
   getTTLForURL,
   extractTTLFromCacheControl,
+  determineTTL,
   calculateCacheSize
 };
 
