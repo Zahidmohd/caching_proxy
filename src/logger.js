@@ -28,12 +28,152 @@ const LOG_FILES = {
   performance: path.join(LOG_DIR, 'performance.log')
 };
 
+// Rotation settings
+const ROTATION_CONFIG = {
+  enabled: true,
+  maxSizeBytes: 10 * 1024 * 1024, // 10MB default
+  maxFiles: 7, // Keep last 7 rotated files
+  checkDaily: true // Also rotate daily
+};
+
+// Track last rotation date for each file
+const lastRotationDate = {};
+
 /**
  * Ensure logs directory exists
  */
 function ensureLogDir() {
   if (!fs.existsSync(LOG_DIR)) {
     fs.mkdirSync(LOG_DIR, { recursive: true });
+  }
+}
+
+/**
+ * Get current date string (YYYY-MM-DD)
+ * @returns {string} - Date string
+ */
+function getCurrentDate() {
+  const now = new Date();
+  return now.toISOString().split('T')[0];
+}
+
+/**
+ * Check if file needs rotation based on size
+ * @param {string} filePath - Path to log file
+ * @returns {boolean} - True if needs rotation
+ */
+function needsSizeRotation(filePath) {
+  if (!ROTATION_CONFIG.enabled) return false;
+  
+  try {
+    if (fs.existsSync(filePath)) {
+      const stats = fs.statSync(filePath);
+      return stats.size >= ROTATION_CONFIG.maxSizeBytes;
+    }
+  } catch (error) {
+    console.error(`Error checking file size: ${error.message}`);
+  }
+  return false;
+}
+
+/**
+ * Check if file needs daily rotation
+ * @param {string} filename - Log file name
+ * @returns {boolean} - True if needs rotation
+ */
+function needsDailyRotation(filename) {
+  if (!ROTATION_CONFIG.enabled || !ROTATION_CONFIG.checkDaily) return false;
+  
+  const currentDate = getCurrentDate();
+  const lastDate = lastRotationDate[filename];
+  
+  if (!lastDate) {
+    lastRotationDate[filename] = currentDate;
+    return false;
+  }
+  
+  if (lastDate !== currentDate) {
+    lastRotationDate[filename] = currentDate;
+    return true;
+  }
+  
+  return false;
+}
+
+/**
+ * Rotate log file
+ * @param {string} filename - Log file name (e.g., 'access', 'cache')
+ */
+function rotateLogFile(filename) {
+  try {
+    const filePath = LOG_FILES[filename];
+    if (!filePath || !fs.existsSync(filePath)) return;
+    
+    // Generate rotated filename with timestamp
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const rotatedName = `${filename}-${timestamp}.log`;
+    const rotatedPath = path.join(LOG_DIR, rotatedName);
+    
+    // Rename current file
+    fs.renameSync(filePath, rotatedPath);
+    
+    // Clean up old rotated files
+    cleanupOldRotatedFiles(filename);
+    
+    info(`Log file rotated: ${filename}.log -> ${rotatedName}`);
+  } catch (error) {
+    console.error(`Error rotating log file ${filename}: ${error.message}`);
+  }
+}
+
+/**
+ * Clean up old rotated log files
+ * @param {string} filename - Log file name
+ */
+function cleanupOldRotatedFiles(filename) {
+  try {
+    // Get all rotated files for this log type
+    const files = fs.readdirSync(LOG_DIR);
+    const pattern = new RegExp(`^${filename}-.*\\.log$`);
+    const rotatedFiles = files
+      .filter(f => pattern.test(f))
+      .map(f => ({
+        name: f,
+        path: path.join(LOG_DIR, f),
+        time: fs.statSync(path.join(LOG_DIR, f)).mtime.getTime()
+      }))
+      .sort((a, b) => b.time - a.time); // Sort by time, newest first
+    
+    // Delete old files beyond maxFiles limit
+    if (rotatedFiles.length > ROTATION_CONFIG.maxFiles) {
+      const filesToDelete = rotatedFiles.slice(ROTATION_CONFIG.maxFiles);
+      filesToDelete.forEach(file => {
+        try {
+          fs.unlinkSync(file.path);
+          debug(`Deleted old log file: ${file.name}`);
+        } catch (error) {
+          console.error(`Error deleting old log file: ${error.message}`);
+        }
+      });
+    }
+  } catch (error) {
+    console.error(`Error cleaning up old log files: ${error.message}`);
+  }
+}
+
+/**
+ * Check and rotate log file if needed
+ * @param {string} filename - Log file name
+ */
+function checkAndRotate(filename) {
+  const filePath = LOG_FILES[filename];
+  if (!filePath) return;
+  
+  const needsSize = needsSizeRotation(filePath);
+  const needsDaily = needsDailyRotation(filename);
+  
+  if (needsSize || needsDaily) {
+    rotateLogFile(filename);
   }
 }
 
@@ -45,6 +185,10 @@ function ensureLogDir() {
 function writeToFile(filename, message) {
   try {
     ensureLogDir();
+    
+    // Check if rotation is needed before writing
+    checkAndRotate(filename);
+    
     const filePath = LOG_FILES[filename];
     if (!filePath) {
       console.error(`Unknown log file: ${filename}`);
@@ -249,6 +393,29 @@ function logPerformance(data) {
   debug(`Performance: ${operation} - ${duration}ms`);
 }
 
+/**
+ * Configure log rotation
+ * @param {Object} config - Rotation configuration
+ * @param {boolean} config.enabled - Enable/disable rotation
+ * @param {number} config.maxSizeMB - Max file size in MB
+ * @param {number} config.maxFiles - Max number of rotated files to keep
+ * @param {boolean} config.checkDaily - Enable daily rotation
+ */
+function configureRotation(config = {}) {
+  if (config.enabled !== undefined) {
+    ROTATION_CONFIG.enabled = config.enabled;
+  }
+  if (config.maxSizeMB !== undefined) {
+    ROTATION_CONFIG.maxSizeBytes = config.maxSizeMB * 1024 * 1024;
+  }
+  if (config.maxFiles !== undefined) {
+    ROTATION_CONFIG.maxFiles = config.maxFiles;
+  }
+  if (config.checkDaily !== undefined) {
+    ROTATION_CONFIG.checkDaily = config.checkDaily;
+  }
+}
+
 module.exports = {
   setLogLevel,
   getLogLevel,
@@ -260,6 +427,7 @@ module.exports = {
   logCache,
   logError,
   logPerformance,
+  configureRotation,
   LOG_LEVELS
 };
 
