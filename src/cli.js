@@ -4,7 +4,7 @@
  */
 
 const { createProxyServer } = require('./server');
-const { clearCache, clearCacheByPattern, getCacheStats } = require('./cache');
+const { clearCache, clearCacheByPattern, clearCacheByURL, getCacheStats } = require('./cache');
 const { getStats } = require('./analytics');
 const { displayConfigSummary } = require('./config');
 
@@ -152,6 +152,44 @@ function clearCachePatternCommand(pattern) {
   console.log(`\n✅ Cache cleared successfully!`);
   console.log(`   ${result.cleared} ${result.cleared === 1 ? 'entry' : 'entries'} removed`);
   console.log(`   ${statsBefore.size - result.cleared} entries remaining`);
+  console.log();
+}
+
+/**
+ * Clear cache entry for a specific URL
+ * @param {string} url - Exact URL to clear
+ * @param {string} method - HTTP method (default: "GET")
+ */
+function clearCacheURLCommand(url, method = 'GET') {
+  console.log('\n🧹 Clearing cache entry for specific URL...');
+  console.log(`   URL: ${url}`);
+  console.log(`   Method: ${method}`);
+  
+  // Get stats before clearing
+  const statsBefore = getCacheStats();
+  console.log(`   Current cache size: ${statsBefore.size} entries`);
+  
+  if (statsBefore.size === 0) {
+    console.log('   Cache is already empty.\n');
+    return;
+  }
+  
+  // Clear cache by URL
+  const result = clearCacheByURL(url, method);
+  
+  if (!result.cleared) {
+    console.log(`\n⚠️  No cache entry found for "${method}:${url}"`);
+    console.log('   💡 Tip: Make sure the URL includes the protocol (http:// or https://)');
+    console.log();
+    return;
+  }
+  
+  console.log(`\n   Cleared entry:`);
+  console.log(`     ${result.key}`);
+  
+  console.log(`\n✅ Cache cleared successfully!`);
+  console.log(`   1 entry removed`);
+  console.log(`   ${statsBefore.size - 1} entries remaining`);
   console.log();
 }
 
@@ -354,6 +392,7 @@ module.exports = {
   startServer,
   clearCache: clearCacheCommand,
   clearCachePattern: clearCachePatternCommand,
+  clearCacheURL: clearCacheURLCommand,
   showCacheStats,
   showCacheList,
   validatePort,

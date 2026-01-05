@@ -656,6 +656,33 @@ function clearCacheByPattern(pattern) {
 }
 
 /**
+ * Clear cache entry for a specific URL
+ * @param {string} url - Exact URL to clear (e.g., "https://api.com/products/123")
+ * @param {string} method - HTTP method (default: "GET")
+ * @returns {Object} - { cleared: boolean, key: string|null }
+ */
+function clearCacheByURL(url, method = 'GET') {
+  const cache = loadCache();
+  const key = generateCacheKey(method, url);
+  
+  // Check if the key exists
+  if (cache.has(key)) {
+    cache.delete(key);
+    saveCache(cache);
+    
+    return {
+      cleared: true,
+      key: key
+    };
+  }
+  
+  return {
+    cleared: false,
+    key: null
+  };
+}
+
+/**
  * Get cache statistics (and clean up expired entries)
  * @returns {Object} - Cache stats (size, keys, expired count)
  */
@@ -690,6 +717,7 @@ module.exports = {
   setCachedResponse,
   clearCache,
   clearCacheByPattern,
+  clearCacheByURL,
   getCacheStats,
   shouldCacheResponse,
   configureCacheLimits,
