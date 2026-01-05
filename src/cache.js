@@ -118,6 +118,42 @@ function matchPattern(pattern, urlPath) {
 }
 
 /**
+ * Extract TTL from Cache-Control header's max-age directive
+ * @param {string} cacheControl - Cache-Control header value
+ * @returns {number|null} - TTL in milliseconds, or null if max-age not found
+ * 
+ * Examples:
+ *   extractTTLFromCacheControl("max-age=3600") => 3600000 (1 hour)
+ *   extractTTLFromCacheControl("public, max-age=600") => 600000 (10 minutes)
+ *   extractTTLFromCacheControl("no-cache") => null
+ *   extractTTLFromCacheControl("max-age=0") => 0
+ *   extractTTLFromCacheControl(null) => null
+ */
+function extractTTLFromCacheControl(cacheControl) {
+  if (!cacheControl) {
+    return null;
+  }
+  
+  // Cache-Control can have multiple directives separated by commas
+  // Example: "public, max-age=3600, must-revalidate"
+  const directives = cacheControl.toLowerCase().split(',').map(d => d.trim());
+  
+  // Look for max-age directive
+  for (const directive of directives) {
+    // Match "max-age=<number>"
+    const match = directive.match(/^max-age=(\d+)$/);
+    if (match) {
+      const seconds = parseInt(match[1], 10);
+      // Convert seconds to milliseconds
+      return seconds * 1000;
+    }
+  }
+  
+  // max-age not found
+  return null;
+}
+
+/**
  * Get TTL for a given URL based on configured patterns
  * @param {string} url - Full URL (e.g., "https://api.com/products/123?page=1")
  * @returns {number} - TTL in milliseconds
@@ -565,6 +601,7 @@ module.exports = {
   configurePatternTTL,
   matchPattern,
   getTTLForURL,
+  extractTTLFromCacheControl,
   calculateCacheSize
 };
 
