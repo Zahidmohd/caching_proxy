@@ -261,6 +261,9 @@ function loadConfig(options = {}) {
   if (cliArgs.origin) {
     config.server.origin = cliArgs.origin;
   }
+  if (cliArgs.logLevel) {
+    config.logging.level = cliArgs.logLevel;
+  }
   
   // Validate configuration
   const validation = validateConfig(config);
@@ -290,6 +293,10 @@ function displayConfigSummary(config) {
     if (customCount > 0) {
       console.log(`   Custom TTL: ${customCount} pattern(s) configured`);
     }
+  }
+  if (config.logging) {
+    console.log(`   Log Level: ${config.logging.level || 'info'}`);
+    console.log(`   Log Format: ${config.logging.format || 'text'}`);
   }
   console.log();
 }

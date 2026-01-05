@@ -20,6 +20,7 @@ program
   .option('-p, --port <number>', 'Port number for the proxy server')
   .option('-o, --origin <url>', 'Origin server URL to forward requests to')
   .option('-c, --config <path>', 'Path to configuration file')
+  .option('--log-level <level>', 'Set log level: debug, info, warn, error (default: info)')
   .option('--clear-cache', 'Clear the cache')
   .option('--cache-stats', 'Show cache statistics and analytics')
   .option('--cache-list', 'List all cached URLs with details');
@@ -42,7 +43,8 @@ if (options.clearCache) {
     configPath: options.config,
     cliArgs: {
       port: options.port,
-      origin: options.origin
+      origin: options.origin,
+      logLevel: options.logLevel
     }
   });
   
@@ -52,15 +54,16 @@ if (options.clearCache) {
   // Show help if no valid options provided
   console.error('\n❌ Error: Missing required arguments\n');
   console.log('Usage:');
-  console.log('  Start server:   caching-proxy --port <number> --origin <url>');
+  console.log('  Start server:   caching-proxy --port <number> --origin <url> [--log-level <level>]');
   console.log('  Use config:     caching-proxy --config <path>');
   console.log('  Clear cache:    caching-proxy --clear-cache');
   console.log('  Cache stats:    caching-proxy --cache-stats');
   console.log('  Cache list:     caching-proxy --cache-list\n');
   console.log('Examples:');
   console.log('  caching-proxy --port 3000 --origin http://dummyjson.com');
+  console.log('  caching-proxy --port 3000 --origin http://dummyjson.com --log-level debug');
   console.log('  caching-proxy --config proxy.config.json');
-  console.log('  caching-proxy --config proxy.config.json --port 4000');
+  console.log('  caching-proxy --config proxy.config.json --port 4000 --log-level warn');
   console.log('  caching-proxy --clear-cache');
   console.log('  caching-proxy --cache-stats');
   console.log('  caching-proxy --cache-list\n');

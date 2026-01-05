@@ -7,6 +7,7 @@ const http = require('http');
 const https = require('https');
 const { URL } = require('url');
 const { getCachedResponse, setCachedResponse } = require('./cache');
+const logger = require('./logger');
 
 /**
  * Forward request to origin server (or serve from cache if available)
@@ -116,9 +117,22 @@ function forwardRequest(req, res, origin) {
  * Create and start the proxy server
  * @param {number} port - Port to listen on
  * @param {string} origin - Origin server URL
+ * @param {Object} config - Optional configuration object
  * @returns {http.Server} - HTTP server instance
  */
-function createProxyServer(port, origin) {
+function createProxyServer(port, origin, config = null) {
+  // Configure logger if config provided
+  if (config && config.logging) {
+    if (config.logging.level) {
+      logger.setLogLevel(config.logging.level);
+      console.log(`📝 Log level set to: ${config.logging.level}`);
+    }
+    if (config.logging.format) {
+      logger.setLogFormat(config.logging.format);
+      console.log(`📝 Log format set to: ${config.logging.format}`);
+    }
+  }
+  
   const server = http.createServer((req, res) => {
     forwardRequest(req, res, origin);
   });
