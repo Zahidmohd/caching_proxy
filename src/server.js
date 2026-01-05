@@ -126,6 +126,105 @@ async function handleHealthCheck(req, res, origin) {
 }
 
 /**
+ * Handle metrics endpoint (Prometheus format)
+ * @param {http.IncomingMessage} req - Request
+ * @param {http.ServerResponse} res - Response
+ * @param {string} origin - Origin server URL
+ */
+function handleMetricsEndpoint(req, res, origin) {
+  const uptime = Date.now() - serverStartTime;
+  const uptimeSeconds = Math.floor(uptime / 1000);
+  const cacheStats = getCacheStats();
+  const analytics = getStats();
+  const memUsage = process.memoryUsage();
+  
+  // Build Prometheus format metrics
+  const metrics = [];
+  
+  // Add HELP and TYPE comments for each metric
+  
+  // HTTP request metrics
+  metrics.push('# HELP http_requests_total Total number of HTTP requests processed');
+  metrics.push('# TYPE http_requests_total counter');
+  metrics.push(`http_requests_total ${analytics.totalRequests}`);
+  metrics.push('');
+  
+  // Cache hit metrics
+  metrics.push('# HELP cache_hits_total Total number of cache hits');
+  metrics.push('# TYPE cache_hits_total counter');
+  metrics.push(`cache_hits_total ${analytics.totalHits}`);
+  metrics.push('');
+  
+  // Cache miss metrics
+  metrics.push('# HELP cache_misses_total Total number of cache misses');
+  metrics.push('# TYPE cache_misses_total counter');
+  metrics.push(`cache_misses_total ${analytics.totalMisses}`);
+  metrics.push('');
+  
+  // Cache hit rate
+  metrics.push('# HELP cache_hit_rate Cache hit rate percentage (0-100)');
+  metrics.push('# TYPE cache_hit_rate gauge');
+  metrics.push(`cache_hit_rate ${analytics.hitRate}`);
+  metrics.push('');
+  
+  // Cache size
+  metrics.push('# HELP cache_entries_total Number of entries in cache');
+  metrics.push('# TYPE cache_entries_total gauge');
+  metrics.push(`cache_entries_total ${cacheStats.size}`);
+  metrics.push('');
+  
+  // Average response time for cache hits
+  metrics.push('# HELP cache_response_time_hit_ms Average response time for cache hits in milliseconds');
+  metrics.push('# TYPE cache_response_time_hit_ms gauge');
+  metrics.push(`cache_response_time_hit_ms ${analytics.avgHitTime}`);
+  metrics.push('');
+  
+  // Average response time for cache misses
+  metrics.push('# HELP cache_response_time_miss_ms Average response time for cache misses in milliseconds');
+  metrics.push('# TYPE cache_response_time_miss_ms gauge');
+  metrics.push(`cache_response_time_miss_ms ${analytics.avgMissTime}`);
+  metrics.push('');
+  
+  // Bandwidth saved
+  metrics.push('# HELP bandwidth_saved_bytes Total bandwidth saved by caching in bytes');
+  metrics.push('# TYPE bandwidth_saved_bytes counter');
+  metrics.push(`bandwidth_saved_bytes ${analytics.bandwidthSaved}`);
+  metrics.push('');
+  
+  // Memory usage
+  metrics.push('# HELP process_memory_heap_used_bytes Memory used by the heap in bytes');
+  metrics.push('# TYPE process_memory_heap_used_bytes gauge');
+  metrics.push(`process_memory_heap_used_bytes ${memUsage.heapUsed}`);
+  metrics.push('');
+  
+  metrics.push('# HELP process_memory_heap_total_bytes Total heap size in bytes');
+  metrics.push('# TYPE process_memory_heap_total_bytes gauge');
+  metrics.push(`process_memory_heap_total_bytes ${memUsage.heapTotal}`);
+  metrics.push('');
+  
+  metrics.push('# HELP process_memory_rss_bytes Resident set size in bytes');
+  metrics.push('# TYPE process_memory_rss_bytes gauge');
+  metrics.push(`process_memory_rss_bytes ${memUsage.rss}`);
+  metrics.push('');
+  
+  // Server uptime
+  metrics.push('# HELP process_uptime_seconds Server uptime in seconds');
+  metrics.push('# TYPE process_uptime_seconds counter');
+  metrics.push(`process_uptime_seconds ${uptimeSeconds}`);
+  metrics.push('');
+  
+  // Join all metrics with newlines
+  const metricsText = metrics.join('\n');
+  
+  // Send response in Prometheus text format
+  res.writeHead(200, {
+    'Content-Type': 'text/plain; version=0.0.4',
+    'Cache-Control': 'no-cache, no-store, must-revalidate'
+  });
+  res.end(metricsText);
+}
+
+/**
  * Forward request to origin server (or serve from cache if available)
  * Preserves: headers, query parameters, request body, and HTTP method
  * @param {http.IncomingMessage} req - Incoming request
@@ -282,6 +381,12 @@ function createProxyServer(port, origin, config = null) {
     // Handle health check endpoint
     if (req.url === '/__health') {
       await handleHealthCheck(req, res, origin);
+      return;
+    }
+    
+    // Handle metrics endpoint (Prometheus format)
+    if (req.url === '/__metrics') {
+      handleMetricsEndpoint(req, res, origin);
       return;
     }
     
