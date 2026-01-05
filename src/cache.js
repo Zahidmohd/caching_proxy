@@ -118,6 +118,44 @@ function matchPattern(pattern, urlPath) {
 }
 
 /**
+ * Get TTL for a given URL based on configured patterns
+ * @param {string} url - Full URL (e.g., "https://api.com/products/123?page=1")
+ * @returns {number} - TTL in milliseconds
+ * 
+ * Priority:
+ * 1. First matching pattern from PATTERN_TTL_CONFIG
+ * 2. DEFAULT_CACHE_TTL if no pattern matches
+ * 
+ * Examples:
+ *   getTTLForURL("https://api.com/products/123") 
+ *     => 600000 if "/products/*" is configured for 600 seconds
+ *   getTTLForURL("https://api.com/unknown")
+ *     => 300000 (DEFAULT_CACHE_TTL)
+ */
+function getTTLForURL(url) {
+  try {
+    // Extract path from URL (without query parameters)
+    const urlObj = new URL(url);
+    const urlPath = urlObj.pathname;
+    
+    // Check all configured patterns
+    for (const [pattern, ttlSeconds] of Object.entries(PATTERN_TTL_CONFIG)) {
+      if (matchPattern(pattern, urlPath)) {
+        // Convert seconds to milliseconds
+        const ttlMs = ttlSeconds * 1000;
+        return ttlMs;
+      }
+    }
+    
+    // No pattern matched, return default TTL
+    return DEFAULT_CACHE_TTL;
+  } catch (error) {
+    // If URL parsing fails, return default TTL
+    return DEFAULT_CACHE_TTL;
+  }
+}
+
+/**
  * Ensure cache directory exists
  */
 function ensureCacheDir() {
@@ -526,6 +564,7 @@ module.exports = {
   configureCacheLimits,
   configurePatternTTL,
   matchPattern,
+  getTTLForURL,
   calculateCacheSize
 };
 
