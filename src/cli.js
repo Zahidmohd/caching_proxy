@@ -5,6 +5,7 @@
 
 const { createProxyServer } = require('./server');
 const { clearCache, getCacheStats } = require('./cache');
+const { getStats } = require('./analytics');
 
 /**
  * Validate port number
@@ -106,9 +107,184 @@ function clearCacheCommand() {
   console.log();
 }
 
+/**
+ * Show cache statistics and analytics
+ */
+function showCacheStats() {
+  console.log('\n📊 Cache Statistics & Analytics\n');
+  console.log('═'.repeat(60));
+  
+  // Get analytics stats
+  const stats = getStats();
+  
+  // Get current cache stats
+  const cacheStats = getCacheStats();
+  
+  // Overall Statistics
+  console.log('\n📈 Overall Performance:');
+  console.log(`   Total Requests:   ${stats.totalRequests.toLocaleString()}`);
+  console.log(`   Cache Hits:       ${stats.totalHits.toLocaleString()} (${stats.hitRate}%)`);
+  console.log(`   Cache Misses:     ${stats.totalMisses.toLocaleString()} (${stats.missRate}%)`);
+  console.log(`   Hit Rate:         ${stats.hitRate}% 🎯`);
+  console.log(`   Uptime:           ${stats.uptime}`);
+  
+  // Cache Storage
+  console.log(`\n💾 Cache Storage:`);
+  console.log(`   Current Entries:  ${cacheStats.size.toLocaleString()}`);
+  
+  // Calculate cache size in KB/MB
+  let cacheSizeBytes = 0;
+  if (cacheStats.size > 0) {
+    const fs = require('fs');
+    const path = require('path');
+    const cacheFile = path.join(__dirname, '..', 'cache', 'cache-data.json');
+    if (fs.existsSync(cacheFile)) {
+      const fileStats = fs.statSync(cacheFile);
+      cacheSizeBytes = fileStats.size;
+    }
+  }
+  
+  let cacheSizeStr;
+  if (cacheSizeBytes > 1024 * 1024) {
+    cacheSizeStr = `${(cacheSizeBytes / (1024 * 1024)).toFixed(2)} MB`;
+  } else if (cacheSizeBytes > 1024) {
+    cacheSizeStr = `${(cacheSizeBytes / 1024).toFixed(2)} KB`;
+  } else {
+    cacheSizeStr = `${cacheSizeBytes} bytes`;
+  }
+  
+  console.log(`   Cache File Size:  ${cacheSizeStr}`);
+  
+  // Top URLs
+  if (stats.topUrls.length > 0) {
+    console.log(`\n🔥 Top 10 Most Accessed URLs:`);
+    console.log('   ' + '─'.repeat(56));
+    stats.topUrls.forEach((urlStat, index) => {
+      const shortUrl = urlStat.url.length > 40 ? urlStat.url.substring(0, 37) + '...' : urlStat.url;
+      console.log(`   ${(index + 1).toString().padStart(2)}. ${shortUrl}`);
+      console.log(`       Hits: ${urlStat.hits} | Misses: ${urlStat.misses} | Total: ${urlStat.total} | Hit Rate: ${urlStat.hitRate}%`);
+    });
+  } else {
+    console.log(`\n🔥 Top URLs: No data yet (server hasn't received requests)`);
+  }
+  
+  // Performance Summary
+  console.log(`\n✨ Summary:`);
+  if (stats.hitRate >= 80) {
+    console.log(`   🎉 Excellent cache performance! (${stats.hitRate}% hit rate)`);
+  } else if (stats.hitRate >= 50) {
+    console.log(`   👍 Good cache performance (${stats.hitRate}% hit rate)`);
+  } else if (stats.hitRate >= 25) {
+    console.log(`   ⚠️  Moderate cache performance (${stats.hitRate}% hit rate)`);
+  } else if (stats.totalRequests > 0) {
+    console.log(`   ⚠️  Low cache performance (${stats.hitRate}% hit rate)`);
+  } else {
+    console.log(`   ℹ️  No requests processed yet`);
+  }
+  
+  console.log('\n' + '═'.repeat(60));
+  console.log();
+}
+
+/**
+ * Show detailed list of all cached URLs
+ */
+function showCacheList() {
+  console.log('\n📋 Cached URLs List\n');
+  console.log('═'.repeat(80));
+  
+  // Get current cache
+  const cacheStats = getCacheStats();
+  
+  if (cacheStats.size === 0) {
+    console.log('\n   ℹ️  Cache is empty. No URLs cached yet.\n');
+    console.log('═'.repeat(80));
+    console.log();
+    return;
+  }
+  
+  // Load cache data to get details
+  const fs = require('fs');
+  const path = require('path');
+  const cacheFile = path.join(__dirname, '..', 'cache', 'cache-data.json');
+  
+  if (!fs.existsSync(cacheFile)) {
+    console.log('\n   ℹ️  Cache file not found.\n');
+    console.log('═'.repeat(80));
+    console.log();
+    return;
+  }
+  
+  const cacheData = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+  const entries = Object.entries(cacheData);
+  
+  console.log(`\n   Total Cached Entries: ${entries.length}\n`);
+  
+  // Sort by cache time (newest first)
+  entries.sort((a, b) => b[1].cachedAt - a[1].cachedAt);
+  
+  entries.forEach(([key, value], index) => {
+    const now = Date.now();
+    const cachedAt = new Date(value.cachedAt);
+    const expiresAt = new Date(value.expiresAt);
+    const timeUntilExpiry = expiresAt - now;
+    const isExpired = timeUntilExpiry <= 0;
+    
+    // Calculate TTL remaining
+    let ttlStr;
+    if (isExpired) {
+      ttlStr = '❌ EXPIRED';
+    } else {
+      const minutes = Math.floor(timeUntilExpiry / 60000);
+      const seconds = Math.floor((timeUntilExpiry % 60000) / 1000);
+      ttlStr = `${minutes}m ${seconds}s`;
+    }
+    
+    // Calculate entry size
+    const entrySize = JSON.stringify(value).length;
+    let sizeStr;
+    if (entrySize > 1024) {
+      sizeStr = `${(entrySize / 1024).toFixed(2)} KB`;
+    } else {
+      sizeStr = `${entrySize} bytes`;
+    }
+    
+    // Parse URL for display
+    let displayUrl = key;
+    if (key.length > 60) {
+      displayUrl = key.substring(0, 57) + '...';
+    }
+    
+    console.log(`   ${(index + 1).toString().padStart(2)}. ${displayUrl}`);
+    console.log(`       Status: ${value.statusCode}`);
+    console.log(`       Size: ${sizeStr}`);
+    console.log(`       Cached: ${cachedAt.toLocaleString()}`);
+    console.log(`       Expires: ${expiresAt.toLocaleString()}`);
+    console.log(`       TTL Remaining: ${ttlStr}`);
+    console.log(`       Content-Type: ${value.headers['content-type'] || 'N/A'}`);
+    console.log();
+  });
+  
+  // Summary
+  const expired = entries.filter(([key, value]) => Date.now() > value.expiresAt).length;
+  const active = entries.length - expired;
+  
+  console.log('   ' + '─'.repeat(76));
+  console.log(`   Summary: ${active} active, ${expired} expired`);
+  
+  if (expired > 0) {
+    console.log(`   💡 Tip: Expired entries will be auto-removed on next access`);
+  }
+  
+  console.log('\n' + '═'.repeat(80));
+  console.log();
+}
+
 module.exports = {
   startServer,
   clearCache: clearCacheCommand,
+  showCacheStats,
+  showCacheList,
   validatePort,
   validateOrigin
 };

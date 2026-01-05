@@ -30,6 +30,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { recordHit, recordMiss } = require('./analytics');
 
 // Cache file path
 const CACHE_DIR = path.join(__dirname, '..', 'cache');
@@ -139,12 +140,15 @@ function getCachedResponse(method, url) {
       // Remove expired entry
       cache.delete(key);
       saveCache(cache);
+      recordMiss(key); // Record as miss since expired
       return null;
     }
     console.log(`✨ Cache HIT: ${key}`);
+    recordHit(key); // Record cache hit
     return cached;
   } else {
     console.log(`❌ Cache MISS: ${key}`);
+    recordMiss(key); // Record cache miss
     return null;
   }
 }
