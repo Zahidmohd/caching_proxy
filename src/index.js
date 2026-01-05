@@ -6,7 +6,7 @@
  */
 
 const { program } = require('commander');
-const { startServer, clearCache, showCacheStats, showCacheList, clearCachePattern, clearCacheURL } = require('./cli');
+const { startServer, clearCache, showCacheStats, showCacheList, clearCachePattern, clearCacheURL, clearCacheOlderThan } = require('./cli');
 const { loadConfig } = require('./config');
 
 // Configure CLI
@@ -24,6 +24,7 @@ program
   .option('--clear-cache', 'Clear the cache')
   .option('--clear-cache-pattern <pattern>', 'Clear cache entries matching pattern (e.g., "/products/*")')
   .option('--clear-cache-url <url>', 'Clear cache entry for specific URL (e.g., "https://api.com/products/1")')
+  .option('--clear-cache-older-than <time>', 'Clear cache entries older than specified time (e.g., "1h", "30m", "2d")')
   .option('--cache-stats', 'Show cache statistics and analytics')
   .option('--cache-list', 'List all cached URLs with details');
 
@@ -39,6 +40,8 @@ if (options.clearCache) {
   clearCachePattern(options.clearCachePattern);
 } else if (options.clearCacheUrl) {
   clearCacheURL(options.clearCacheUrl);
+} else if (options.clearCacheOlderThan) {
+  clearCacheOlderThan(options.clearCacheOlderThan);
 } else if (options.cacheStats) {
   showCacheStats();
 } else if (options.cacheList) {

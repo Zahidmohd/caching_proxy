@@ -4,7 +4,7 @@
  */
 
 const { createProxyServer } = require('./server');
-const { clearCache, clearCacheByPattern, clearCacheByURL, getCacheStats } = require('./cache');
+const { clearCache, clearCacheByPattern, clearCacheByURL, clearCacheOlderThan, getCacheStats } = require('./cache');
 const { getStats } = require('./analytics');
 const { displayConfigSummary } = require('./config');
 
@@ -190,6 +190,55 @@ function clearCacheURLCommand(url, method = 'GET') {
   console.log(`\n✅ Cache cleared successfully!`);
   console.log(`   1 entry removed`);
   console.log(`   ${statsBefore.size - 1} entries remaining`);
+  console.log();
+}
+
+/**
+ * Clear cache entries older than specified time
+ * @param {string} timeStr - Time string (e.g., "1h", "30m", "2d")
+ */
+function clearCacheOlderThanCommand(timeStr) {
+  console.log('\n🧹 Clearing cache entries older than specified time...');
+  console.log(`   Time threshold: ${timeStr}`);
+  
+  // Get stats before clearing
+  const statsBefore = getCacheStats();
+  console.log(`   Current cache size: ${statsBefore.size} entries`);
+  
+  if (statsBefore.size === 0) {
+    console.log('   Cache is already empty.\n');
+    return;
+  }
+  
+  // Clear cache older than time
+  const result = clearCacheOlderThan(timeStr);
+  
+  // Check for error
+  if (result.error) {
+    console.log(`\n❌ Error: ${result.error}`);
+    console.log('   Examples: 1h (1 hour), 30m (30 minutes), 2d (2 days), 60s (60 seconds)');
+    console.log();
+    return;
+  }
+  
+  if (result.cleared === 0) {
+    console.log(`\n⚠️  No cache entries older than ${timeStr}`);
+    console.log();
+    return;
+  }
+  
+  // Show what was cleared
+  console.log(`\n   Cleared entries:`);
+  result.keys.slice(0, 5).forEach((key, index) => {
+    console.log(`     ${index + 1}. ${key}`);
+  });
+  if (result.cleared > 5) {
+    console.log(`     ... and ${result.cleared - 5} more`);
+  }
+  
+  console.log(`\n✅ Cache cleared successfully!`);
+  console.log(`   ${result.cleared} ${result.cleared === 1 ? 'entry' : 'entries'} removed`);
+  console.log(`   ${statsBefore.size - result.cleared} entries remaining`);
   console.log();
 }
 
@@ -393,6 +442,7 @@ module.exports = {
   clearCache: clearCacheCommand,
   clearCachePattern: clearCachePatternCommand,
   clearCacheURL: clearCacheURLCommand,
+  clearCacheOlderThan: clearCacheOlderThanCommand,
   showCacheStats,
   showCacheList,
   validatePort,

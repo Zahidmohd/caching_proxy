@@ -683,6 +683,90 @@ function clearCacheByURL(url, method = 'GET') {
 }
 
 /**
+ * Parse time string to milliseconds
+ * Supports: s (seconds), m (minutes), h (hours), d (days)
+ * @param {string} timeStr - Time string (e.g., "1h", "30m", "2d")
+ * @returns {number|null} - Time in milliseconds, or null if invalid
+ * 
+ * Examples:
+ *   parseTimeString("1h") => 3600000 (1 hour)
+ *   parseTimeString("30m") => 1800000 (30 minutes)
+ *   parseTimeString("2d") => 172800000 (2 days)
+ *   parseTimeString("invalid") => null
+ */
+function parseTimeString(timeStr) {
+  if (!timeStr || typeof timeStr !== 'string') {
+    return null;
+  }
+  
+  // Match number followed by unit (s, m, h, d)
+  const match = timeStr.trim().match(/^(\d+)(s|m|h|d)$/i);
+  
+  if (!match) {
+    return null;
+  }
+  
+  const value = parseInt(match[1], 10);
+  const unit = match[2].toLowerCase();
+  
+  // Convert to milliseconds
+  const units = {
+    's': 1000,           // seconds
+    'm': 60 * 1000,      // minutes
+    'h': 60 * 60 * 1000, // hours
+    'd': 24 * 60 * 60 * 1000 // days
+  };
+  
+  return value * units[unit];
+}
+
+/**
+ * Clear cache entries older than specified time
+ * @param {string} timeStr - Time string (e.g., "1h", "30m", "2d")
+ * @returns {Object} - { cleared: number, keys: Array<string>, error: string|null }
+ */
+function clearCacheOlderThan(timeStr) {
+  // Parse time string
+  const timeMs = parseTimeString(timeStr);
+  
+  if (timeMs === null) {
+    return {
+      cleared: 0,
+      keys: [],
+      error: `Invalid time format: "${timeStr}". Use format like: 1h, 30m, 2d, 60s`
+    };
+  }
+  
+  const cache = loadCache();
+  const keysToRemove = [];
+  const now = Date.now();
+  const cutoffTime = now - timeMs;
+  
+  // Find entries older than cutoff time
+  for (const [key, value] of cache.entries()) {
+    const cachedAt = value.cachedAt || 0;
+    
+    if (cachedAt < cutoffTime) {
+      keysToRemove.push(key);
+    }
+  }
+  
+  // Remove old entries
+  keysToRemove.forEach(key => cache.delete(key));
+  
+  // Save cache
+  if (keysToRemove.length > 0) {
+    saveCache(cache);
+  }
+  
+  return {
+    cleared: keysToRemove.length,
+    keys: keysToRemove,
+    error: null
+  };
+}
+
+/**
  * Get cache statistics (and clean up expired entries)
  * @returns {Object} - Cache stats (size, keys, expired count)
  */
@@ -718,6 +802,7 @@ module.exports = {
   clearCache,
   clearCacheByPattern,
   clearCacheByURL,
+  clearCacheOlderThan,
   getCacheStats,
   shouldCacheResponse,
   configureCacheLimits,
@@ -726,6 +811,7 @@ module.exports = {
   getTTLForURL,
   extractTTLFromCacheControl,
   determineTTL,
+  parseTimeString,
   calculateCacheSize
 };
 
