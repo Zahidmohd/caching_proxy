@@ -7,6 +7,7 @@
 
 const { program } = require('commander');
 const { startServer, clearCache, showCacheStats, showCacheList } = require('./cli');
+const { loadConfig } = require('./config');
 
 // Configure CLI
 program
@@ -18,6 +19,7 @@ program
 program
   .option('-p, --port <number>', 'Port number for the proxy server')
   .option('-o, --origin <url>', 'Origin server URL to forward requests to')
+  .option('-c, --config <path>', 'Path to configuration file')
   .option('--clear-cache', 'Clear the cache')
   .option('--cache-stats', 'Show cache statistics and analytics')
   .option('--cache-list', 'List all cached URLs with details');
@@ -34,18 +36,31 @@ if (options.clearCache) {
   showCacheStats();
 } else if (options.cacheList) {
   showCacheList();
-} else if (options.port && options.origin) {
-  startServer(options.port, options.origin);
+} else if (options.config || (options.port && options.origin)) {
+  // Load configuration
+  const config = loadConfig({
+    configPath: options.config,
+    cliArgs: {
+      port: options.port,
+      origin: options.origin
+    }
+  });
+  
+  // Start server with configuration
+  startServer(config.server.port, config.server.origin, config);
 } else {
   // Show help if no valid options provided
   console.error('\n❌ Error: Missing required arguments\n');
   console.log('Usage:');
   console.log('  Start server:   caching-proxy --port <number> --origin <url>');
+  console.log('  Use config:     caching-proxy --config <path>');
   console.log('  Clear cache:    caching-proxy --clear-cache');
   console.log('  Cache stats:    caching-proxy --cache-stats');
   console.log('  Cache list:     caching-proxy --cache-list\n');
   console.log('Examples:');
   console.log('  caching-proxy --port 3000 --origin http://dummyjson.com');
+  console.log('  caching-proxy --config proxy.config.json');
+  console.log('  caching-proxy --config proxy.config.json --port 4000');
   console.log('  caching-proxy --clear-cache');
   console.log('  caching-proxy --cache-stats');
   console.log('  caching-proxy --cache-list\n');

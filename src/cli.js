@@ -6,6 +6,7 @@
 const { createProxyServer } = require('./server');
 const { clearCache, getCacheStats } = require('./cache');
 const { getStats } = require('./analytics');
+const { displayConfigSummary } = require('./config');
 
 /**
  * Validate port number
@@ -55,19 +56,25 @@ function validateOrigin(origin) {
  * Start the caching proxy server
  * @param {string|number} port - Port to listen on
  * @param {string} origin - Origin server URL
+ * @param {Object} config - Optional configuration object
  */
-function startServer(port, origin) {
+function startServer(port, origin, config = null) {
   // Validate inputs
   const validPort = validatePort(port);
   const validOrigin = validateOrigin(origin);
   
-  console.log('\n🚀 Starting Caching Proxy Server...');
-  console.log(`   Port:   ${validPort}`);
-  console.log(`   Origin: ${validOrigin}`);
-  console.log('');
+  // Display configuration summary if config was used
+  if (config) {
+    displayConfigSummary(config);
+  } else {
+    console.log('\n🚀 Starting Caching Proxy Server...');
+    console.log(`   Port:   ${validPort}`);
+    console.log(`   Origin: ${validOrigin}`);
+    console.log('');
+  }
   
   // Create and start the proxy server
-  createProxyServer(validPort, validOrigin);
+  createProxyServer(validPort, validOrigin, config);
 }
 
 /**
