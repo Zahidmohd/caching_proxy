@@ -590,11 +590,21 @@ function setCachedResponse(method, url, responseData, hasAuth = false, cacheCont
 
 /**
  * Clear all cached responses
- * @returns {number} - Number of entries cleared
+ * @param {boolean} dryRun - If true, only return what would be deleted without deleting
+ * @returns {Object} - { cleared: number, keys: Array<string> }
  */
-function clearCache() {
+function clearCache(dryRun = false) {
   const cache = loadCache();
+  const keys = Array.from(cache.keys());
   const size = cache.size;
+  
+  // If dry-run, just return what would be deleted
+  if (dryRun) {
+    return {
+      cleared: size,
+      keys: keys
+    };
+  }
   
   // Delete the cache file
   try {
@@ -605,15 +615,19 @@ function clearCache() {
     console.error('Error deleting cache file:', error.message);
   }
   
-  return size;
+  return {
+    cleared: size,
+    keys: keys
+  };
 }
 
 /**
  * Clear cache entries matching a pattern
  * @param {string} pattern - Pattern with wildcards (e.g., "/products/*", "/api/**")
+ * @param {boolean} dryRun - If true, only return what would be deleted without deleting
  * @returns {Object} - { cleared: number, keys: Array<string> }
  */
-function clearCacheByPattern(pattern) {
+function clearCacheByPattern(pattern, dryRun = false) {
   const cache = loadCache();
   const keysToRemove = [];
   
@@ -641,6 +655,14 @@ function clearCacheByPattern(pattern) {
     }
   }
   
+  // If dry-run, just return what would be deleted
+  if (dryRun) {
+    return {
+      cleared: keysToRemove.length,
+      keys: keysToRemove
+    };
+  }
+  
   // Remove matched entries
   keysToRemove.forEach(key => cache.delete(key));
   
@@ -659,16 +681,20 @@ function clearCacheByPattern(pattern) {
  * Clear cache entry for a specific URL
  * @param {string} url - Exact URL to clear (e.g., "https://api.com/products/123")
  * @param {string} method - HTTP method (default: "GET")
+ * @param {boolean} dryRun - If true, only return what would be deleted without deleting
  * @returns {Object} - { cleared: boolean, key: string|null }
  */
-function clearCacheByURL(url, method = 'GET') {
+function clearCacheByURL(url, method = 'GET', dryRun = false) {
   const cache = loadCache();
   const key = generateCacheKey(method, url);
   
   // Check if the key exists
   if (cache.has(key)) {
-    cache.delete(key);
-    saveCache(cache);
+    // If dry-run, just return what would be deleted
+    if (!dryRun) {
+      cache.delete(key);
+      saveCache(cache);
+    }
     
     return {
       cleared: true,
@@ -723,9 +749,10 @@ function parseTimeString(timeStr) {
 /**
  * Clear cache entries older than specified time
  * @param {string} timeStr - Time string (e.g., "1h", "30m", "2d")
+ * @param {boolean} dryRun - If true, only return what would be deleted without deleting
  * @returns {Object} - { cleared: number, keys: Array<string>, error: string|null }
  */
-function clearCacheOlderThan(timeStr) {
+function clearCacheOlderThan(timeStr, dryRun = false) {
   // Parse time string
   const timeMs = parseTimeString(timeStr);
   
@@ -749,6 +776,15 @@ function clearCacheOlderThan(timeStr) {
     if (cachedAt < cutoffTime) {
       keysToRemove.push(key);
     }
+  }
+  
+  // If dry-run, just return what would be deleted
+  if (dryRun) {
+    return {
+      cleared: keysToRemove.length,
+      keys: keysToRemove,
+      error: null
+    };
   }
   
   // Remove old entries

@@ -25,6 +25,7 @@ program
   .option('--clear-cache-pattern <pattern>', 'Clear cache entries matching pattern (e.g., "/products/*")')
   .option('--clear-cache-url <url>', 'Clear cache entry for specific URL (e.g., "https://api.com/products/1")')
   .option('--clear-cache-older-than <time>', 'Clear cache entries older than specified time (e.g., "1h", "30m", "2d")')
+  .option('--dry-run', 'Preview what would be deleted without actually deleting (use with clear-cache commands)')
   .option('--cache-stats', 'Show cache statistics and analytics')
   .option('--cache-list', 'List all cached URLs with details');
 
@@ -35,13 +36,13 @@ const options = program.opts();
 
 // Handle commands
 if (options.clearCache) {
-  clearCache();
+  clearCache(options.dryRun);
 } else if (options.clearCachePattern) {
-  clearCachePattern(options.clearCachePattern);
+  clearCachePattern(options.clearCachePattern, options.dryRun);
 } else if (options.clearCacheUrl) {
-  clearCacheURL(options.clearCacheUrl);
+  clearCacheURL(options.clearCacheUrl, options.dryRun);
 } else if (options.clearCacheOlderThan) {
-  clearCacheOlderThan(options.clearCacheOlderThan);
+  clearCacheOlderThan(options.clearCacheOlderThan, options.dryRun);
 } else if (options.cacheStats) {
   showCacheStats();
 } else if (options.cacheList) {

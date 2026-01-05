@@ -79,9 +79,11 @@ function startServer(port, origin, config = null) {
 
 /**
  * Clear the cache
+ * @param {boolean} dryRun - If true, only preview what would be deleted
  */
-function clearCacheCommand() {
-  console.log('\n🧹 Clearing cache...');
+function clearCacheCommand(dryRun = false) {
+  const mode = dryRun ? '[DRY RUN - PREVIEW ONLY]' : '';
+  console.log(`\n🧹 Clearing cache... ${mode}`);
   
   // Get stats before clearing
   const statsBefore = getCacheStats();
@@ -92,24 +94,29 @@ function clearCacheCommand() {
     return;
   }
   
+  // Clear the cache (or preview)
+  const result = clearCache(dryRun);
+  
   // Show what's being cleared
-  console.log('\n   Cached entries:');
-  statsBefore.keys.slice(0, 5).forEach((key, index) => {
+  console.log(`\n   ${dryRun ? 'Would delete' : 'Deleted'} entries:`);
+  result.keys.slice(0, 10).forEach((key, index) => {
     console.log(`     ${index + 1}. ${key}`);
   });
-  if (statsBefore.size > 5) {
-    console.log(`     ... and ${statsBefore.size - 5} more`);
+  if (result.cleared > 10) {
+    console.log(`     ... and ${result.cleared - 10} more`);
   }
   
-  // Clear the cache
-  const clearedCount = clearCache();
-  
-  console.log(`\n✅ Cache cleared successfully!`);
-  console.log(`   ${clearedCount} ${clearedCount === 1 ? 'entry' : 'entries'} removed`);
-  
-  // Show expired entries info if any
-  if (statsBefore.expiredRemoved > 0) {
-    console.log(`   (${statsBefore.expiredRemoved} expired entries auto-removed during stats check)`);
+  if (dryRun) {
+    console.log(`\n🔍 DRY RUN: ${result.cleared} ${result.cleared === 1 ? 'entry' : 'entries'} would be removed`);
+    console.log(`   💡 Run without --dry-run to actually delete these entries`);
+  } else {
+    console.log(`\n✅ Cache cleared successfully!`);
+    console.log(`   ${result.cleared} ${result.cleared === 1 ? 'entry' : 'entries'} removed`);
+    
+    // Show expired entries info if any
+    if (statsBefore.expiredRemoved > 0) {
+      console.log(`   (${statsBefore.expiredRemoved} expired entries auto-removed during stats check)`);
+    }
   }
   console.log();
 }
@@ -117,9 +124,11 @@ function clearCacheCommand() {
 /**
  * Clear cache entries matching a pattern
  * @param {string} pattern - Pattern with wildcards (e.g., "/products/*")
+ * @param {boolean} dryRun - If true, only preview what would be deleted
  */
-function clearCachePatternCommand(pattern) {
-  console.log('\n🧹 Clearing cache entries matching pattern...');
+function clearCachePatternCommand(pattern, dryRun = false) {
+  const mode = dryRun ? '[DRY RUN - PREVIEW ONLY]' : '';
+  console.log(`\n🧹 Clearing cache entries matching pattern... ${mode}`);
   console.log(`   Pattern: ${pattern}`);
   
   // Get stats before clearing
@@ -131,8 +140,8 @@ function clearCachePatternCommand(pattern) {
     return;
   }
   
-  // Clear cache by pattern
-  const result = clearCacheByPattern(pattern);
+  // Clear cache by pattern (or preview)
+  const result = clearCacheByPattern(pattern, dryRun);
   
   if (result.cleared === 0) {
     console.log(`\n⚠️  No cache entries matched the pattern "${pattern}"`);
@@ -141,27 +150,35 @@ function clearCachePatternCommand(pattern) {
   }
   
   // Show what was cleared
-  console.log(`\n   Cleared entries:`);
-  result.keys.slice(0, 5).forEach((key, index) => {
+  console.log(`\n   ${dryRun ? 'Would delete' : 'Deleted'} entries:`);
+  result.keys.slice(0, 10).forEach((key, index) => {
     console.log(`     ${index + 1}. ${key}`);
   });
-  if (result.cleared > 5) {
-    console.log(`     ... and ${result.cleared - 5} more`);
+  if (result.cleared > 10) {
+    console.log(`     ... and ${result.cleared - 10} more`);
   }
   
-  console.log(`\n✅ Cache cleared successfully!`);
-  console.log(`   ${result.cleared} ${result.cleared === 1 ? 'entry' : 'entries'} removed`);
-  console.log(`   ${statsBefore.size - result.cleared} entries remaining`);
+  if (dryRun) {
+    console.log(`\n🔍 DRY RUN: ${result.cleared} ${result.cleared === 1 ? 'entry' : 'entries'} would be removed`);
+    console.log(`   ${statsBefore.size - result.cleared} entries would remain`);
+    console.log(`   💡 Run without --dry-run to actually delete these entries`);
+  } else {
+    console.log(`\n✅ Cache cleared successfully!`);
+    console.log(`   ${result.cleared} ${result.cleared === 1 ? 'entry' : 'entries'} removed`);
+    console.log(`   ${statsBefore.size - result.cleared} entries remaining`);
+  }
   console.log();
 }
 
 /**
  * Clear cache entry for a specific URL
  * @param {string} url - Exact URL to clear
+ * @param {boolean} dryRun - If true, only preview what would be deleted
  * @param {string} method - HTTP method (default: "GET")
  */
-function clearCacheURLCommand(url, method = 'GET') {
-  console.log('\n🧹 Clearing cache entry for specific URL...');
+function clearCacheURLCommand(url, dryRun = false, method = 'GET') {
+  const mode = dryRun ? '[DRY RUN - PREVIEW ONLY]' : '';
+  console.log(`\n🧹 Clearing cache entry for specific URL... ${mode}`);
   console.log(`   URL: ${url}`);
   console.log(`   Method: ${method}`);
   
@@ -174,8 +191,8 @@ function clearCacheURLCommand(url, method = 'GET') {
     return;
   }
   
-  // Clear cache by URL
-  const result = clearCacheByURL(url, method);
+  // Clear cache by URL (or preview)
+  const result = clearCacheByURL(url, method, dryRun);
   
   if (!result.cleared) {
     console.log(`\n⚠️  No cache entry found for "${method}:${url}"`);
@@ -184,21 +201,29 @@ function clearCacheURLCommand(url, method = 'GET') {
     return;
   }
   
-  console.log(`\n   Cleared entry:`);
+  console.log(`\n   ${dryRun ? 'Would delete' : 'Deleted'} entry:`);
   console.log(`     ${result.key}`);
   
-  console.log(`\n✅ Cache cleared successfully!`);
-  console.log(`   1 entry removed`);
-  console.log(`   ${statsBefore.size - 1} entries remaining`);
+  if (dryRun) {
+    console.log(`\n🔍 DRY RUN: 1 entry would be removed`);
+    console.log(`   ${statsBefore.size - 1} entries would remain`);
+    console.log(`   💡 Run without --dry-run to actually delete this entry`);
+  } else {
+    console.log(`\n✅ Cache cleared successfully!`);
+    console.log(`   1 entry removed`);
+    console.log(`   ${statsBefore.size - 1} entries remaining`);
+  }
   console.log();
 }
 
 /**
  * Clear cache entries older than specified time
  * @param {string} timeStr - Time string (e.g., "1h", "30m", "2d")
+ * @param {boolean} dryRun - If true, only preview what would be deleted
  */
-function clearCacheOlderThanCommand(timeStr) {
-  console.log('\n🧹 Clearing cache entries older than specified time...');
+function clearCacheOlderThanCommand(timeStr, dryRun = false) {
+  const mode = dryRun ? '[DRY RUN - PREVIEW ONLY]' : '';
+  console.log(`\n🧹 Clearing cache entries older than specified time... ${mode}`);
   console.log(`   Time threshold: ${timeStr}`);
   
   // Get stats before clearing
@@ -210,8 +235,8 @@ function clearCacheOlderThanCommand(timeStr) {
     return;
   }
   
-  // Clear cache older than time
-  const result = clearCacheOlderThan(timeStr);
+  // Clear cache older than time (or preview)
+  const result = clearCacheOlderThan(timeStr, dryRun);
   
   // Check for error
   if (result.error) {
@@ -228,17 +253,23 @@ function clearCacheOlderThanCommand(timeStr) {
   }
   
   // Show what was cleared
-  console.log(`\n   Cleared entries:`);
-  result.keys.slice(0, 5).forEach((key, index) => {
+  console.log(`\n   ${dryRun ? 'Would delete' : 'Deleted'} entries:`);
+  result.keys.slice(0, 10).forEach((key, index) => {
     console.log(`     ${index + 1}. ${key}`);
   });
-  if (result.cleared > 5) {
-    console.log(`     ... and ${result.cleared - 5} more`);
+  if (result.cleared > 10) {
+    console.log(`     ... and ${result.cleared - 10} more`);
   }
   
-  console.log(`\n✅ Cache cleared successfully!`);
-  console.log(`   ${result.cleared} ${result.cleared === 1 ? 'entry' : 'entries'} removed`);
-  console.log(`   ${statsBefore.size - result.cleared} entries remaining`);
+  if (dryRun) {
+    console.log(`\n🔍 DRY RUN: ${result.cleared} ${result.cleared === 1 ? 'entry' : 'entries'} would be removed`);
+    console.log(`   ${statsBefore.size - result.cleared} entries would remain`);
+    console.log(`   💡 Run without --dry-run to actually delete these entries`);
+  } else {
+    console.log(`\n✅ Cache cleared successfully!`);
+    console.log(`   ${result.cleared} ${result.cleared === 1 ? 'entry' : 'entries'} removed`);
+    console.log(`   ${statsBefore.size - result.cleared} entries remaining`);
+  }
   console.log();
 }
 
