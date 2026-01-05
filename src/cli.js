@@ -155,6 +155,28 @@ function showCacheStats() {
   
   console.log(`   Cache File Size:  ${cacheSizeStr}`);
   
+  // Performance Metrics
+  if (stats.performance && stats.performance.hitCount > 0 || stats.performance.missCount > 0) {
+    console.log(`\n⚡ Performance Metrics:`);
+    
+    if (stats.performance.hitCount > 0) {
+      console.log(`   Avg Cache Hit Time:   ${stats.performance.avgHitTime}ms 🚀`);
+    }
+    
+    if (stats.performance.missCount > 0) {
+      console.log(`   Avg Cache Miss Time:  ${stats.performance.avgMissTime}ms`);
+    }
+    
+    if (stats.performance.hitCount > 0 && stats.performance.missCount > 0) {
+      const speedup = (stats.performance.avgMissTime / stats.performance.avgHitTime).toFixed(2);
+      console.log(`   Cache Speedup:        ${speedup}x faster ⚡`);
+    }
+    
+    if (stats.performance.bandwidthSaved > 0) {
+      console.log(`   Bandwidth Saved:      ${stats.performance.bandwidthSavedStr} 💾`);
+    }
+  }
+  
   // Top URLs
   if (stats.topUrls.length > 0) {
     console.log(`\n🔥 Top 10 Most Accessed URLs:`);

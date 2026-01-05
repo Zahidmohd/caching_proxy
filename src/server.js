@@ -20,8 +20,11 @@ function forwardRequest(req, res, origin) {
   const targetUrl = new URL(req.url, origin); // Preserves path and query params
   const fullUrl = `${origin}${req.url}`;
   
+  // Track request start time for performance metrics
+  const startTime = Date.now();
+  
   // ✅ Check cache first
-  const cached = getCachedResponse(req.method, fullUrl);
+  const cached = getCachedResponse(req.method, fullUrl, startTime);
   
   if (cached) {
     // Cache HIT - serve from cache

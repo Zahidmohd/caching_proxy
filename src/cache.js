@@ -128,7 +128,7 @@ function generateCacheKey(method, url) {
  *   body: string
  * }
  */
-function getCachedResponse(method, url) {
+function getCachedResponse(method, url, startTime = Date.now()) {
   const key = generateCacheKey(method, url);
   const cache = loadCache();
   const cached = cache.get(key);
@@ -140,15 +140,21 @@ function getCachedResponse(method, url) {
       // Remove expired entry
       cache.delete(key);
       saveCache(cache);
-      recordMiss(key); // Record as miss since expired
+      const responseTime = Date.now() - startTime;
+      recordMiss(key, responseTime); // Record as miss since expired
       return null;
     }
+    const responseTime = Date.now() - startTime;
     console.log(`✨ Cache HIT: ${key}`);
-    recordHit(key); // Record cache hit
+    
+    // Calculate data size from cached body
+    const dataSize = cached.body ? Buffer.byteLength(cached.body, 'utf8') : 0;
+    recordHit(key, responseTime, dataSize); // Record cache hit with timing and size
     return cached;
   } else {
+    const responseTime = Date.now() - startTime;
     console.log(`❌ Cache MISS: ${key}`);
-    recordMiss(key); // Record cache miss
+    recordMiss(key, responseTime); // Record cache miss with timing
     return null;
   }
 }

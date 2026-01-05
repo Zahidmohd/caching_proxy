@@ -39,6 +39,13 @@ function loadAnalytics() {
     totalHits: 0,
     totalMisses: 0,
     urlStats: {}, // { url: { hits: 0, misses: 0, lastAccess: timestamp } }
+    performance: {
+      hitResponseTimes: [],    // Array of response times for cache hits (in ms)
+      missResponseTimes: [],   // Array of response times for cache misses (in ms)
+      totalHitTime: 0,         // Sum of all hit response times
+      totalMissTime: 0,        // Sum of all miss response times
+      bandwidthSaved: 0        // Bytes saved from cache hits
+    },
     startTime: Date.now()
   };
 }
@@ -59,8 +66,10 @@ function saveAnalytics(analytics) {
 /**
  * Record a cache hit
  * @param {string} url - The URL that was hit
+ * @param {number} responseTime - Response time in milliseconds
+ * @param {number} dataSize - Size of response data in bytes
  */
-function recordHit(url) {
+function recordHit(url, responseTime = 0, dataSize = 0) {
   const analytics = loadAnalytics();
   analytics.totalHits++;
   
@@ -71,14 +80,36 @@ function recordHit(url) {
   analytics.urlStats[url].hits++;
   analytics.urlStats[url].lastAccess = Date.now();
   
+  // Initialize performance object if it doesn't exist
+  if (!analytics.performance) {
+    analytics.performance = {
+      hitResponseTimes: [],
+      missResponseTimes: [],
+      totalHitTime: 0,
+      totalMissTime: 0,
+      bandwidthSaved: 0
+    };
+  }
+  
+  // Record performance metrics
+  if (responseTime > 0) {
+    analytics.performance.hitResponseTimes.push(responseTime);
+    analytics.performance.totalHitTime += responseTime;
+  }
+  
+  if (dataSize > 0) {
+    analytics.performance.bandwidthSaved += dataSize;
+  }
+  
   saveAnalytics(analytics);
 }
 
 /**
  * Record a cache miss
  * @param {string} url - The URL that was missed
+ * @param {number} responseTime - Response time in milliseconds
  */
-function recordMiss(url) {
+function recordMiss(url, responseTime = 0) {
   const analytics = loadAnalytics();
   analytics.totalMisses++;
   
@@ -88,6 +119,23 @@ function recordMiss(url) {
   
   analytics.urlStats[url].misses++;
   analytics.urlStats[url].lastAccess = Date.now();
+  
+  // Initialize performance object if it doesn't exist
+  if (!analytics.performance) {
+    analytics.performance = {
+      hitResponseTimes: [],
+      missResponseTimes: [],
+      totalHitTime: 0,
+      totalMissTime: 0,
+      bandwidthSaved: 0
+    };
+  }
+  
+  // Record performance metrics
+  if (responseTime > 0) {
+    analytics.performance.missResponseTimes.push(responseTime);
+    analytics.performance.totalMissTime += responseTime;
+  }
   
   saveAnalytics(analytics);
 }
@@ -134,6 +182,36 @@ function getStats() {
     .sort((a, b) => b.total - a.total)
     .slice(0, 10);
   
+  // Calculate performance metrics
+  const performance = analytics.performance || {
+    hitResponseTimes: [],
+    missResponseTimes: [],
+    totalHitTime: 0,
+    totalMissTime: 0,
+    bandwidthSaved: 0
+  };
+  
+  const avgHitTime = performance.hitResponseTimes.length > 0
+    ? (performance.totalHitTime / performance.hitResponseTimes.length).toFixed(2)
+    : 0;
+  
+  const avgMissTime = performance.missResponseTimes.length > 0
+    ? (performance.totalMissTime / performance.missResponseTimes.length).toFixed(2)
+    : 0;
+  
+  // Format bandwidth saved
+  let bandwidthSavedStr;
+  const bytes = performance.bandwidthSaved;
+  if (bytes > 1024 * 1024 * 1024) {
+    bandwidthSavedStr = `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+  } else if (bytes > 1024 * 1024) {
+    bandwidthSavedStr = `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  } else if (bytes > 1024) {
+    bandwidthSavedStr = `${(bytes / 1024).toFixed(2)} KB`;
+  } else {
+    bandwidthSavedStr = `${bytes} bytes`;
+  }
+  
   return {
     totalHits: analytics.totalHits,
     totalMisses: analytics.totalMisses,
@@ -142,7 +220,15 @@ function getStats() {
     missRate: parseFloat(missRate),
     uptime: uptimeStr,
     uptimeMs,
-    topUrls
+    topUrls,
+    performance: {
+      avgHitTime: parseFloat(avgHitTime),
+      avgMissTime: parseFloat(avgMissTime),
+      bandwidthSaved: bytes,
+      bandwidthSavedStr,
+      hitCount: performance.hitResponseTimes.length,
+      missCount: performance.missResponseTimes.length
+    }
   };
 }
 
