@@ -79,6 +79,45 @@ function configurePatternTTL(patterns = {}) {
 }
 
 /**
+ * Match a URL path against a pattern with wildcards
+ * Supports * (matches any characters) and ** (matches any path segments)
+ * @param {string} pattern - Pattern with wildcards (e.g., "/products/*", "/api/**")
+ * @param {string} urlPath - URL path to match (e.g., "/products/123", "/api/v1/users")
+ * @returns {boolean} - True if URL matches the pattern
+ * 
+ * Examples:
+ *   matchPattern("/products/*", "/products/123") => true
+ *   matchPattern("/products/*", "/products/123/reviews") => false
+ *   matchPattern("/products/**", "/products/123/reviews") => true
+ *   matchPattern("/api/v1/*", "/api/v1/users") => true
+ *   matchPattern("/static/*", "/products/1") => false
+ */
+function matchPattern(pattern, urlPath) {
+  // Replace ** with a placeholder before escaping
+  const doubleStar = '___DOUBLESTAR___';
+  const singleStar = '___SINGLESTAR___';
+  
+  // Replace wildcards with placeholders
+  let regexPattern = pattern
+    .replace(/\*\*/g, doubleStar)  // Replace ** first
+    .replace(/\*/g, singleStar);    // Then replace remaining *
+  
+  // Escape special regex characters
+  regexPattern = regexPattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
+  
+  // Replace placeholders with regex patterns
+  regexPattern = regexPattern
+    .replace(new RegExp(doubleStar, 'g'), '.*')   // ** -> .* (match anything)
+    .replace(new RegExp(singleStar, 'g'), '[^/]*'); // * -> [^/]* (match anything except /)
+  
+  // Anchor the pattern to match the entire path
+  regexPattern = `^${regexPattern}$`;
+  
+  const regex = new RegExp(regexPattern);
+  return regex.test(urlPath);
+}
+
+/**
  * Ensure cache directory exists
  */
 function ensureCacheDir() {
@@ -486,6 +525,7 @@ module.exports = {
   shouldCacheResponse,
   configureCacheLimits,
   configurePatternTTL,
+  matchPattern,
   calculateCacheSize
 };
 
