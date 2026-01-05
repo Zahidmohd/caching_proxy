@@ -44,6 +44,10 @@ const DEFAULT_CACHE_TTL = 5 * 60 * 1000;
 let MAX_CACHE_ENTRIES = 1000; // Maximum number of cache entries
 let MAX_CACHE_SIZE_MB = 100;   // Maximum cache size in MB
 
+// Pattern-based TTL configuration
+// Format: { "/pattern/*": ttlInSeconds, ... }
+let PATTERN_TTL_CONFIG = {};
+
 /**
  * Configure cache limits
  * @param {Object} options - Configuration options
@@ -57,6 +61,21 @@ function configureCacheLimits(options = {}) {
   if (options.maxSizeMB !== undefined) {
     MAX_CACHE_SIZE_MB = options.maxSizeMB;
   }
+}
+
+/**
+ * Configure pattern-based TTL
+ * @param {Object} patterns - Pattern to TTL mapping
+ * @example
+ * configurePatternTTL({
+ *   "/products/*": 600,      // 10 minutes
+ *   "/users/*": 60,          // 1 minute
+ *   "/static/*": 3600        // 1 hour
+ * })
+ */
+function configurePatternTTL(patterns = {}) {
+  PATTERN_TTL_CONFIG = { ...patterns };
+  console.log(`🕒 Configured ${Object.keys(PATTERN_TTL_CONFIG).length} pattern-based TTL rules`);
 }
 
 /**
@@ -466,6 +485,7 @@ module.exports = {
   getCacheStats,
   shouldCacheResponse,
   configureCacheLimits,
+  configurePatternTTL,
   calculateCacheSize
 };
 

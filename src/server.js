@@ -6,7 +6,7 @@
 const http = require('http');
 const https = require('https');
 const { URL } = require('url');
-const { getCachedResponse, setCachedResponse, getCacheStats, configureCacheLimits } = require('./cache');
+const { getCachedResponse, setCachedResponse, getCacheStats, configureCacheLimits, configurePatternTTL } = require('./cache');
 const { getStats } = require('./analytics');
 const logger = require('./logger');
 
@@ -426,6 +426,11 @@ function createProxyServer(port, origin, config = null) {
       maxSizeMB: config.cache.maxSizeMB
     });
     console.log(`💾 Cache limits: ${config.cache.maxEntries} entries, ${config.cache.maxSizeMB} MB`);
+    
+    // Configure pattern-based TTL if provided
+    if (config.cache.customTTL) {
+      configurePatternTTL(config.cache.customTTL);
+    }
   }
   
   // Configure logger if config provided
