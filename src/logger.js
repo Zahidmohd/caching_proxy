@@ -17,6 +17,9 @@ const LOG_LEVELS = {
 // Current log level (default: info)
 let currentLevel = 'info';
 
+// Log format (text or json)
+let logFormat = 'text';
+
 // Log directory
 const LOG_DIR = path.join(__dirname, '..', 'logs');
 
@@ -224,6 +227,27 @@ function getLogLevel() {
 }
 
 /**
+ * Set the log format
+ * @param {string} format - Log format: 'text' or 'json'
+ */
+function setLogFormat(format) {
+  if (format !== 'text' && format !== 'json') {
+    console.error(`Invalid log format: ${format}. Using 'text' instead.`);
+    logFormat = 'text';
+    return;
+  }
+  logFormat = format;
+}
+
+/**
+ * Get current log format
+ * @returns {string} - Current log format
+ */
+function getLogFormat() {
+  return logFormat;
+}
+
+/**
  * Check if a message should be logged based on current level
  * @param {string} level - Level of the message
  * @returns {boolean} - True if should log
@@ -314,12 +338,25 @@ function logAccess(data) {
   const timestamp = getTimestamp();
   const { method, url, statusCode, cacheStatus, responseTime } = data;
   
-  const message = `[${timestamp}] ${method} ${url} - ${statusCode} - ${cacheStatus} - ${responseTime}ms`;
+  let message;
+  if (logFormat === 'json') {
+    message = JSON.stringify({
+      timestamp,
+      type: 'access',
+      method,
+      url,
+      statusCode,
+      cacheStatus,
+      responseTime
+    });
+  } else {
+    message = `[${timestamp}] ${method} ${url} - ${statusCode} - ${cacheStatus} - ${responseTime}ms`;
+  }
   
   // Write to access.log
   writeToFile('access', message);
   
-  // Also log to console if level allows
+  // Also log to console if level allows (always text format)
   info(`${method} ${url} - ${statusCode} - ${cacheStatus} - ${responseTime}ms`);
 }
 
@@ -334,15 +371,27 @@ function logCache(data) {
   const timestamp = getTimestamp();
   const { status, key, size } = data;
   
-  let message = `[${timestamp}] ${status}: ${key}`;
-  if (size) {
-    message += ` (${size} bytes)`;
+  let message;
+  if (logFormat === 'json') {
+    const logData = {
+      timestamp,
+      type: 'cache',
+      status,
+      key
+    };
+    if (size) logData.size = size;
+    message = JSON.stringify(logData);
+  } else {
+    message = `[${timestamp}] ${status}: ${key}`;
+    if (size) {
+      message += ` (${size} bytes)`;
+    }
   }
   
   // Write to cache.log
   writeToFile('cache', message);
   
-  // Also log to console as debug
+  // Also log to console as debug (always text format)
   debug(`Cache ${status}: ${key}`);
 }
 
@@ -354,15 +403,27 @@ function logCache(data) {
 function logError(message, meta = null) {
   const timestamp = getTimestamp();
   
-  let logMessage = `[${timestamp}] ERROR: ${message}`;
-  if (meta) {
-    logMessage += ` | Meta: ${JSON.stringify(meta)}`;
+  let logMessage;
+  if (logFormat === 'json') {
+    const logData = {
+      timestamp,
+      type: 'error',
+      level: 'error',
+      message
+    };
+    if (meta) logData.meta = meta;
+    logMessage = JSON.stringify(logData);
+  } else {
+    logMessage = `[${timestamp}] ERROR: ${message}`;
+    if (meta) {
+      logMessage += ` | Meta: ${JSON.stringify(meta)}`;
+    }
   }
   
   // Write to error.log
   writeToFile('error', logMessage);
   
-  // Also log to console
+  // Also log to console (always text format)
   error(message, meta);
 }
 
@@ -378,18 +439,31 @@ function logPerformance(data) {
   const timestamp = getTimestamp();
   const { operation, duration, url, meta } = data;
   
-  let message = `[${timestamp}] ${operation} - ${duration}ms`;
-  if (url) {
-    message += ` - ${url}`;
-  }
-  if (meta) {
-    message += ` | ${JSON.stringify(meta)}`;
+  let message;
+  if (logFormat === 'json') {
+    const logData = {
+      timestamp,
+      type: 'performance',
+      operation,
+      duration
+    };
+    if (url) logData.url = url;
+    if (meta) logData.meta = meta;
+    message = JSON.stringify(logData);
+  } else {
+    message = `[${timestamp}] ${operation} - ${duration}ms`;
+    if (url) {
+      message += ` - ${url}`;
+    }
+    if (meta) {
+      message += ` | ${JSON.stringify(meta)}`;
+    }
   }
   
   // Write to performance.log
   writeToFile('performance', message);
   
-  // Also log to console as debug
+  // Also log to console as debug (always text format)
   debug(`Performance: ${operation} - ${duration}ms`);
 }
 
@@ -419,6 +493,8 @@ function configureRotation(config = {}) {
 module.exports = {
   setLogLevel,
   getLogLevel,
+  setLogFormat,
+  getLogFormat,
   debug,
   info,
   warn,
