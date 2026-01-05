@@ -128,7 +128,7 @@ function generateCacheKey(method, url) {
  *   body: string
  * }
  */
-function getCachedResponse(method, url, startTime = Date.now()) {
+function getCachedResponse(method, url, startTime = Date.now(), requestId = null) {
   const key = generateCacheKey(method, url);
   const cache = loadCache();
   const cached = cache.get(key);
@@ -150,11 +150,30 @@ function getCachedResponse(method, url, startTime = Date.now()) {
     // Calculate data size from cached body
     const dataSize = cached.body ? Buffer.byteLength(cached.body, 'utf8') : 0;
     recordHit(key, responseTime, dataSize); // Record cache hit with timing and size
+    
+    // Log cache event with request ID
+    const logger = require('./logger');
+    logger.logCache({
+      status: 'HIT',
+      key,
+      size: dataSize,
+      requestId
+    });
+    
     return cached;
   } else {
     const responseTime = Date.now() - startTime;
     console.log(`❌ Cache MISS: ${key}`);
     recordMiss(key, responseTime); // Record cache miss with timing
+    
+    // Log cache event with request ID
+    const logger = require('./logger');
+    logger.logCache({
+      status: 'MISS',
+      key,
+      requestId
+    });
+    
     return null;
   }
 }
@@ -215,7 +234,7 @@ function isCacheable(cacheControl) {
  *   ❌ NOT CACHED: 4xx client errors (404, 400, 401, etc.)
  *   ❌ NOT CACHED: 5xx server errors (500, 502, 503, etc.)
  */
-function setCachedResponse(method, url, responseData, hasAuth = false, cacheControl = null) {
+function setCachedResponse(method, url, responseData, hasAuth = false, cacheControl = null, requestId = null) {
   // Only cache GET requests (standard HTTP caching practice)
   if (method.toUpperCase() !== 'GET') {
     console.log(`⏭️  NOT cached (method ${method}): ${method}:${url}`);
@@ -255,6 +274,18 @@ function setCachedResponse(method, url, responseData, hasAuth = false, cacheCont
   
   const ttlMinutes = Math.floor(DEFAULT_CACHE_TTL / 60000);
   console.log(`💾 Cached: ${key} (TTL: ${ttlMinutes}min, ${cache.size} total entries)`);
+  
+  // Log performance metric
+  const logger = require('./logger');
+  const dataSize = responseData.body ? Buffer.byteLength(responseData.body, 'utf8') : 0;
+  logger.logPerformance({
+    operation: 'cache-store',
+    duration: 0,
+    url,
+    meta: { size: dataSize, entries: cache.size },
+    requestId
+  });
+  
   return true;
 }
 

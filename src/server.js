@@ -21,21 +21,36 @@ function forwardRequest(req, res, origin) {
   const targetUrl = new URL(req.url, origin); // Preserves path and query params
   const fullUrl = `${origin}${req.url}`;
   
+  // Generate unique request ID for tracking
+  const requestId = logger.generateRequestId();
+  
   // Track request start time for performance metrics
   const startTime = Date.now();
   
   // ✅ Check cache first
-  const cached = getCachedResponse(req.method, fullUrl, startTime);
+  const cached = getCachedResponse(req.method, fullUrl, startTime, requestId);
   
   if (cached) {
     // Cache HIT - serve from cache
+    const responseTime = Date.now() - startTime;
     console.log(`✨ Serving from cache: ${req.method} ${targetUrl.pathname}${targetUrl.search}`);
     
     // Add X-Cache: HIT header
     const cachedHeaders = {
       ...cached.headers,
-      'x-cache': 'HIT'
+      'x-cache': 'HIT',
+      'x-request-id': requestId
     };
+    
+    // Log access event
+    logger.logAccess({
+      method: req.method,
+      url: fullUrl,
+      statusCode: cached.statusCode,
+      cacheStatus: 'HIT',
+      responseTime,
+      requestId
+    });
     
     // Send cached response to client
     res.writeHead(cached.statusCode, cachedHeaders);
@@ -69,10 +84,11 @@ function forwardRequest(req, res, origin) {
     // ✅ Add X-Cache: MISS header to indicate response is from origin server
     const responseHeaders = {
       ...proxyRes.headers,
-      'x-cache': 'MISS'
+      'x-cache': 'MISS',
+      'x-request-id': requestId
     };
     
-    // Forward status code and headers (including X-Cache: MISS)
+    // Forward status code and headers (including X-Cache: MISS and X-Request-Id)
     res.writeHead(proxyRes.statusCode, responseHeaders);
     
     // Collect response body to store in cache
@@ -86,6 +102,19 @@ function forwardRequest(req, res, origin) {
     proxyRes.on('end', () => {
       res.end();
       
+      // Calculate response time
+      const responseTime = Date.now() - startTime;
+      
+      // Log access event
+      logger.logAccess({
+        method: req.method,
+        url: fullUrl,
+        statusCode: proxyRes.statusCode,
+        cacheStatus: 'MISS',
+        responseTime,
+        requestId
+      });
+      
       // Check if request has authentication (don't cache authenticated requests)
       const hasAuth = req.headers['authorization'] || req.headers['cookie'];
       
@@ -97,7 +126,7 @@ function forwardRequest(req, res, origin) {
         statusCode: proxyRes.statusCode,
         headers: proxyRes.headers, // Store original headers (without X-Cache)
         body: responseBody
-      }, hasAuth, cacheControl);
+      }, hasAuth, cacheControl, requestId);
     });
   });
   

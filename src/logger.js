@@ -61,6 +61,17 @@ function getCurrentDate() {
 }
 
 /**
+ * Generate a unique request ID
+ * Format: timestamp-random (e.g., 1704470123456-a3f9)
+ * @returns {string} - Unique request ID
+ */
+function generateRequestId() {
+  const timestamp = Date.now();
+  const random = Math.random().toString(36).substring(2, 6);
+  return `${timestamp}-${random}`;
+}
+
+/**
  * Check if file needs rotation based on size
  * @param {string} filePath - Path to log file
  * @returns {boolean} - True if needs rotation
@@ -333,14 +344,15 @@ function error(message, meta = null) {
  * @param {number} data.statusCode - Response status code
  * @param {string} data.cacheStatus - Cache status (HIT/MISS)
  * @param {number} data.responseTime - Response time in ms
+ * @param {string} data.requestId - Request ID (optional)
  */
 function logAccess(data) {
   const timestamp = getTimestamp();
-  const { method, url, statusCode, cacheStatus, responseTime } = data;
+  const { method, url, statusCode, cacheStatus, responseTime, requestId } = data;
   
   let message;
   if (logFormat === 'json') {
-    message = JSON.stringify({
+    const logData = {
       timestamp,
       type: 'access',
       method,
@@ -348,16 +360,20 @@ function logAccess(data) {
       statusCode,
       cacheStatus,
       responseTime
-    });
+    };
+    if (requestId) logData.requestId = requestId;
+    message = JSON.stringify(logData);
   } else {
-    message = `[${timestamp}] ${method} ${url} - ${statusCode} - ${cacheStatus} - ${responseTime}ms`;
+    const idPrefix = requestId ? `[${requestId}] ` : '';
+    message = `[${timestamp}] ${idPrefix}${method} ${url} - ${statusCode} - ${cacheStatus} - ${responseTime}ms`;
   }
   
   // Write to access.log
   writeToFile('access', message);
   
   // Also log to console if level allows (always text format)
-  info(`${method} ${url} - ${statusCode} - ${cacheStatus} - ${responseTime}ms`);
+  const idPrefix = requestId ? `[${requestId}] ` : '';
+  info(`${idPrefix}${method} ${url} - ${statusCode} - ${cacheStatus} - ${responseTime}ms`);
 }
 
 /**
@@ -366,10 +382,11 @@ function logAccess(data) {
  * @param {string} data.status - HIT, MISS, or EXPIRED
  * @param {string} data.key - Cache key
  * @param {number} data.size - Size in bytes (optional)
+ * @param {string} data.requestId - Request ID (optional)
  */
 function logCache(data) {
   const timestamp = getTimestamp();
-  const { status, key, size } = data;
+  const { status, key, size, requestId } = data;
   
   let message;
   if (logFormat === 'json') {
@@ -380,9 +397,11 @@ function logCache(data) {
       key
     };
     if (size) logData.size = size;
+    if (requestId) logData.requestId = requestId;
     message = JSON.stringify(logData);
   } else {
-    message = `[${timestamp}] ${status}: ${key}`;
+    const idPrefix = requestId ? `[${requestId}] ` : '';
+    message = `[${timestamp}] ${idPrefix}${status}: ${key}`;
     if (size) {
       message += ` (${size} bytes)`;
     }
@@ -392,15 +411,17 @@ function logCache(data) {
   writeToFile('cache', message);
   
   // Also log to console as debug (always text format)
-  debug(`Cache ${status}: ${key}`);
+  const idPrefix = requestId ? `[${requestId}] ` : '';
+  debug(`${idPrefix}Cache ${status}: ${key}`);
 }
 
 /**
  * Log an error to error.log
  * @param {string} message - Error message
  * @param {Object} meta - Error metadata
+ * @param {string} requestId - Request ID (optional)
  */
-function logError(message, meta = null) {
+function logError(message, meta = null, requestId = null) {
   const timestamp = getTimestamp();
   
   let logMessage;
@@ -412,9 +433,11 @@ function logError(message, meta = null) {
       message
     };
     if (meta) logData.meta = meta;
+    if (requestId) logData.requestId = requestId;
     logMessage = JSON.stringify(logData);
   } else {
-    logMessage = `[${timestamp}] ERROR: ${message}`;
+    const idPrefix = requestId ? `[${requestId}] ` : '';
+    logMessage = `[${timestamp}] ${idPrefix}ERROR: ${message}`;
     if (meta) {
       logMessage += ` | Meta: ${JSON.stringify(meta)}`;
     }
@@ -424,7 +447,8 @@ function logError(message, meta = null) {
   writeToFile('error', logMessage);
   
   // Also log to console (always text format)
-  error(message, meta);
+  const idPrefix = requestId ? `[${requestId}] ` : '';
+  error(`${idPrefix}${message}`, meta);
 }
 
 /**
@@ -434,10 +458,11 @@ function logError(message, meta = null) {
  * @param {number} data.duration - Duration in ms
  * @param {string} data.url - URL (optional)
  * @param {Object} data.meta - Additional metadata (optional)
+ * @param {string} data.requestId - Request ID (optional)
  */
 function logPerformance(data) {
   const timestamp = getTimestamp();
-  const { operation, duration, url, meta } = data;
+  const { operation, duration, url, meta, requestId } = data;
   
   let message;
   if (logFormat === 'json') {
@@ -449,9 +474,11 @@ function logPerformance(data) {
     };
     if (url) logData.url = url;
     if (meta) logData.meta = meta;
+    if (requestId) logData.requestId = requestId;
     message = JSON.stringify(logData);
   } else {
-    message = `[${timestamp}] ${operation} - ${duration}ms`;
+    const idPrefix = requestId ? `[${requestId}] ` : '';
+    message = `[${timestamp}] ${idPrefix}${operation} - ${duration}ms`;
     if (url) {
       message += ` - ${url}`;
     }
@@ -464,7 +491,8 @@ function logPerformance(data) {
   writeToFile('performance', message);
   
   // Also log to console as debug (always text format)
-  debug(`Performance: ${operation} - ${duration}ms`);
+  const idPrefix = requestId ? `[${requestId}] ` : '';
+  debug(`${idPrefix}Performance: ${operation} - ${duration}ms`);
 }
 
 /**
@@ -495,6 +523,7 @@ module.exports = {
   getLogLevel,
   setLogFormat,
   getLogFormat,
+  generateRequestId,
   debug,
   info,
   warn,
