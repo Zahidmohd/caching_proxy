@@ -6,8 +6,124 @@
 const http = require('http');
 const https = require('https');
 const { URL } = require('url');
-const { getCachedResponse, setCachedResponse } = require('./cache');
+const { getCachedResponse, setCachedResponse, getCacheStats } = require('./cache');
+const { getStats } = require('./analytics');
 const logger = require('./logger');
+
+// Track server start time for uptime
+const serverStartTime = Date.now();
+
+/**
+ * Format uptime duration in human-readable format
+ * @param {number} ms - Milliseconds
+ * @returns {string} - Formatted uptime
+ */
+function formatUptime(ms) {
+  const seconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  
+  if (days > 0) {
+    return `${days}d ${hours % 24}h ${minutes % 60}m ${seconds % 60}s`;
+  } else if (hours > 0) {
+    return `${hours}h ${minutes % 60}m ${seconds % 60}s`;
+  } else if (minutes > 0) {
+    return `${minutes}m ${seconds % 60}s`;
+  } else {
+    return `${seconds}s`;
+  }
+}
+
+/**
+ * Check if origin server is reachable
+ * @param {string} origin - Origin URL
+ * @returns {Promise<boolean>} - True if reachable
+ */
+async function checkOriginReachability(origin) {
+  return new Promise((resolve) => {
+    try {
+      const originUrl = new URL(origin);
+      const client = originUrl.protocol === 'https:' ? https : http;
+      
+      const options = {
+        hostname: originUrl.hostname,
+        port: originUrl.port || (originUrl.protocol === 'https:' ? 443 : 80),
+        path: '/',
+        method: 'HEAD',
+        timeout: 3000 // 3 second timeout
+      };
+      
+      const req = client.request(options, (res) => {
+        resolve(true);
+      });
+      
+      req.on('error', () => {
+        resolve(false);
+      });
+      
+      req.on('timeout', () => {
+        req.destroy();
+        resolve(false);
+      });
+      
+      req.end();
+    } catch (error) {
+      resolve(false);
+    }
+  });
+}
+
+/**
+ * Handle health check endpoint
+ * @param {http.IncomingMessage} req - Request
+ * @param {http.ServerResponse} res - Response
+ * @param {string} origin - Origin server URL
+ */
+async function handleHealthCheck(req, res, origin) {
+  const uptime = Date.now() - serverStartTime;
+  const cacheStats = getCacheStats();
+  const analytics = getStats();
+  const originReachable = await checkOriginReachability(origin);
+  
+  // Get memory usage
+  const memUsage = process.memoryUsage();
+  const memoryMB = (memUsage.heapUsed / 1024 / 1024).toFixed(2);
+  
+  // Determine health status
+  const status = originReachable ? 'healthy' : 'degraded';
+  const statusCode = originReachable ? 200 : 503;
+  
+  const healthData = {
+    status: status,
+    uptime: formatUptime(uptime),
+    uptimeMs: uptime,
+    timestamp: new Date().toISOString(),
+    cache: {
+      size: cacheStats.size,
+      hitRate: analytics.hitRate,
+      entries: cacheStats.size,
+      totalHits: analytics.totalHits,
+      totalMisses: analytics.totalMisses
+    },
+    origin: {
+      url: origin,
+      reachable: originReachable
+    },
+    memory: {
+      heapUsed: `${memoryMB} MB`,
+      heapTotal: `${(memUsage.heapTotal / 1024 / 1024).toFixed(2)} MB`,
+      rss: `${(memUsage.rss / 1024 / 1024).toFixed(2)} MB`
+    },
+    version: '1.0.0'
+  };
+  
+  res.writeHead(statusCode, {
+    'Content-Type': 'application/json',
+    'Cache-Control': 'no-cache, no-store, must-revalidate'
+  });
+  res.end(JSON.stringify(healthData, null, 2));
+}
 
 /**
  * Forward request to origin server (or serve from cache if available)
@@ -162,7 +278,14 @@ function createProxyServer(port, origin, config = null) {
     }
   }
   
-  const server = http.createServer((req, res) => {
+  const server = http.createServer(async (req, res) => {
+    // Handle health check endpoint
+    if (req.url === '/__health') {
+      await handleHealthCheck(req, res, origin);
+      return;
+    }
+    
+    // Forward all other requests
     forwardRequest(req, res, origin);
   });
 
