@@ -1,0 +1,52 @@
+{
+  "name": "Development Configuration",
+  "description": "Configuration optimized for local development with verbose logging",
+  
+  "server": {
+    "port": 3000,
+    "origin": "https://dummyjson.com",
+    "host": "localhost"
+  },
+  
+  "cache": {
+    "enabled": true,
+    "defaultTTL": 60,
+    "maxEntries": 100,
+    "customTTL": {
+      "/products/*": 120,
+      "/users/*": 30
+    }
+  },
+  
+  "security": {
+    "excludeAuthenticatedRequests": true
+  },
+  
+  "logging": {
+    "enabled": true,
+    "level": "debug",
+    "format": "text",
+    "console": {
+      "enabled": true,
+      "colorize": true
+    },
+    "files": {
+      "access": "./logs/dev-access.log",
+      "error": "./logs/dev-error.log"
+    }
+  },
+  
+  "analytics": {
+    "enabled": true,
+    "trackPerformance": true,
+    "trackBandwidth": true
+  },
+  
+  "monitoring": {
+    "healthCheck": {
+      "enabled": true,
+      "path": "/__health"
+    }
+  }
+}
+

@@ -1,0 +1,113 @@
+{
+  "name": "Production Configuration",
+  "description": "Configuration optimized for production deployment with security and performance",
+  
+  "server": {
+    "port": 8080,
+    "origin": "${ORIGIN_URL}",
+    "host": "0.0.0.0"
+  },
+  
+  "cache": {
+    "enabled": true,
+    "defaultTTL": 300,
+    "maxEntries": 10000,
+    "maxSizeMB": 500,
+    "strategy": "lru",
+    "customTTL": {
+      "/api/products/*": 600,
+      "/api/users/*": 60,
+      "/static/*": 3600,
+      "/api/public/*": 1800
+    },
+    "excludePatterns": [
+      "/api/auth/*",
+      "/api/admin/*",
+      "/api/private/*"
+    ],
+    "cacheControl": {
+      "respectOrigin": true
+    }
+  },
+  
+  "security": {
+    "excludeAuthenticatedRequests": true,
+    "maxRequestSize": "5mb",
+    "rateLimit": {
+      "enabled": true,
+      "windowMs": 60000,
+      "maxRequests": 1000,
+      "perIP": true
+    }
+  },
+  
+  "logging": {
+    "enabled": true,
+    "level": "info",
+    "format": "json",
+    "destination": "file",
+    "files": {
+      "access": "./logs/access.log",
+      "error": "./logs/error.log",
+      "cache": "./logs/cache.log",
+      "performance": "./logs/performance.log"
+    },
+    "rotation": {
+      "enabled": true,
+      "maxSize": "50mb",
+      "maxFiles": 30
+    },
+    "console": {
+      "enabled": false
+    }
+  },
+  
+  "analytics": {
+    "enabled": true,
+    "file": "./data/analytics.json",
+    "trackPerformance": true,
+    "trackBandwidth": true
+  },
+  
+  "performance": {
+    "compression": {
+      "enabled": true,
+      "algorithm": "gzip",
+      "threshold": 1024
+    },
+    "timeout": {
+      "request": 30000,
+      "response": 30000
+    }
+  },
+  
+  "headers": {
+    "custom": {
+      "X-Proxy-By": "Caching-Proxy-Server",
+      "X-Proxy-Version": "1.0.0",
+      "X-Content-Type-Options": "nosniff",
+      "X-Frame-Options": "DENY"
+    }
+  },
+  
+  "ssl": {
+    "enabled": true,
+    "cert": "${SSL_CERT_PATH}",
+    "key": "${SSL_KEY_PATH}",
+    "redirectHttp": true
+  },
+  
+  "monitoring": {
+    "healthCheck": {
+      "enabled": true,
+      "path": "/__health",
+      "interval": 30000
+    },
+    "metrics": {
+      "enabled": true,
+      "path": "/__metrics",
+      "format": "prometheus"
+    }
+  }
+}
+

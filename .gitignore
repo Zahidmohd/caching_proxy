@@ -16,7 +16,12 @@ npm-debug.log*
 
 # Environment variables
 .env
-.env.local
+.env.*
+!.env.example
+
+# Configuration files (keep examples)
+proxy.config.json
+!proxy.config.*.json
 
 # OS files
 .DS_Store

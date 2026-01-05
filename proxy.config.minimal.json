@@ -1,0 +1,15 @@
+{
+  "name": "Minimal Configuration Example",
+  "description": "Simplest configuration with only required settings",
+  
+  "server": {
+    "port": 3000,
+    "origin": "https://dummyjson.com"
+  },
+  
+  "cache": {
+    "enabled": true,
+    "defaultTTL": 300
+  }
+}
+
