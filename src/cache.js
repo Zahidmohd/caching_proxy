@@ -29,6 +29,20 @@
  *   ✅ Optional header-based differentiation for content negotiation
  *   ✅ Efficient for lookups
  * 
+ * Cache Entry Structure:
+ * ---------------------
+ * Each cache entry contains:
+ *   - statusCode: HTTP status code
+ *   - headers: Complete response headers
+ *   - body: Response body (compressed or uncompressed)
+ *   - compression: Compression method used ('gzip', 'brotli', 'none')
+ *   - varyHeaders: Array of headers from Vary response header
+ *   - etag: ETag from origin response (for conditional requests)
+ *   - lastModified: Last-Modified from origin response (for conditional requests)
+ *   - cachedAt: Timestamp when cached
+ *   - expiresAt: Timestamp when cache expires
+ *   - lastAccessTime: Timestamp of last access (for LRU eviction)
+ * 
  * Storage:
  *   ✅ File-based (cache/cache-data.json)
  *   ✅ Persistent across process restarts
@@ -761,6 +775,18 @@ function setCachedResponse(method, url, responseData, hasAuth = false, cacheCont
     }
   }
   
+  // Extract ETag and Last-Modified headers for conditional requests
+  const etag = responseData.headers['etag'] || responseData.headers['ETag'];
+  const lastModified = responseData.headers['last-modified'] || responseData.headers['Last-Modified'];
+  
+  // Log ETag/Last-Modified detection
+  if (etag) {
+    console.log(`🏷️  ETag stored: ${etag}`);
+  }
+  if (lastModified) {
+    console.log(`📅 Last-Modified stored: ${lastModified}`);
+  }
+  
   // Add expiration timestamp and access time to cache entry
   const now = Date.now();
   const cacheEntry = {
@@ -769,6 +795,8 @@ function setCachedResponse(method, url, responseData, hasAuth = false, cacheCont
     body: compressedBody,
     compression: compressionUsed, // Compression method used: 'gzip', 'brotli', or 'none'
     varyHeaders: varyHeaders, // Store Vary headers for validation
+    etag: etag || null, // Store ETag for conditional requests
+    lastModified: lastModified || null, // Store Last-Modified for conditional requests
     cachedAt: now,
     expiresAt: now + ttl,
     lastAccessTime: now // Track for LRU eviction

@@ -494,6 +494,30 @@ By default, the cache key is `METHOD:URL`. When `cacheKeyHeaders` is configured,
   ```
   Combine multiple headers for complex scenarios
 
+**Automatic Vary Header Support**:
+
+The proxy automatically detects and respects the `Vary` header from origin responses. When an origin server sends a `Vary` header, the proxy:
+- Parses the varying headers (e.g., `Vary: Accept-Language`)
+- Merges them with configured `cacheKeyHeaders`
+- Uses the combined list to generate cache keys
+- Stores separate cache entries for different header combinations
+
+Example:
+```bash
+# Origin responds with: Vary: Accept-Encoding
+# Configuration has: cacheKeyHeaders: ["accept-language"]
+
+# Final cache key includes BOTH:
+# - accept-language (from config)
+# - accept-encoding (from Vary header)
+
+Server logs:
+🔀 Vary header detected: accept-encoding
+🔑 Cache key includes headers: accept-encoding, accept-language
+```
+
+**Note**: Responses with `Vary: *` are not cached (per HTTP specification).
+
 ## 🗂️ Project Structure
 
 ```
