@@ -454,10 +454,45 @@ When cache limits are reached, the **LRU (Least Recently Used)** eviction policy
 
 **Header-Based Cache Keys:**
 
-By default, the cache key is `METHOD:URL`. When `cacheKeyHeaders` is configured, a hash of the specified header values is appended to the cache key (e.g., `GET:https://api.com/data:a1b2c3d4`). This allows different cache entries for the same URL with different header combinations, useful for:
-- **Internationalization**: Cache responses by `accept-language` for multi-language support
-- **Content Negotiation**: Cache different formats based on `accept` or `accept-encoding` headers
-- **API Versioning**: Differentiate cache entries by custom version headers
+By default, the cache key is `METHOD:URL`. When `cacheKeyHeaders` is configured, a hash of the specified header values is appended to the cache key (e.g., `GET:https://api.com/data:a1b2c3d4`). This allows different cache entries for the same URL with different header combinations.
+
+**Configuration accepts ANY header name** - no hardcoding required. Common use cases:
+
+- **Internationalization**: 
+  ```json
+  { "cache": { "cacheKeyHeaders": ["accept-language"] } }
+  ```
+  Cache responses by `accept-language` for multi-language support (en-US, fr-FR, es-ES, etc.)
+
+- **Content Negotiation**: 
+  ```json
+  { "cache": { "cacheKeyHeaders": ["accept-encoding"] } }
+  ```
+  Cache different encodings (gzip, brotli, deflate)
+
+- **Device Differentiation**:
+  ```json
+  { "cache": { "cacheKeyHeaders": ["user-agent"] } }
+  ```
+  Separate cache for mobile, desktop, tablet
+
+- **API Versioning**:
+  ```json
+  { "cache": { "cacheKeyHeaders": ["x-api-version"] } }
+  ```
+  Differentiate cache entries by custom version headers (v1, v2, v3)
+
+- **Multi-Tenant**:
+  ```json
+  { "cache": { "cacheKeyHeaders": ["x-tenant-id"] } }
+  ```
+  Separate cache per tenant/client
+
+- **Multiple Headers**:
+  ```json
+  { "cache": { "cacheKeyHeaders": ["accept-language", "user-agent"] } }
+  ```
+  Combine multiple headers for complex scenarios
 
 ## 🗂️ Project Structure
 
