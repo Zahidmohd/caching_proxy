@@ -264,6 +264,9 @@ function loadConfig(options = {}) {
   if (cliArgs.logLevel) {
     config.logging.level = cliArgs.logLevel;
   }
+  if (cliArgs.versionTag) {
+    config.cache.version = cliArgs.versionTag;
+  }
   
   // Validate configuration
   const validation = validateConfig(config);
@@ -288,6 +291,9 @@ function displayConfigSummary(config) {
   console.log(`   Server:    ${config.server.host}:${config.server.port}`);
   console.log(`   Origin:    ${config.server.origin}`);
   console.log(`   Cache TTL: ${config.cache.defaultTTL}s`);
+  if (config.cache.version) {
+    console.log(`   Cache Version: ${config.cache.version} 🏷️`);
+  }
   if (config.cache.customTTL) {
     const customCount = Object.keys(config.cache.customTTL).length;
     if (customCount > 0) {

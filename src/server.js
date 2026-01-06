@@ -16,6 +16,9 @@ const logger = require('./logger');
 // Track server start time for uptime
 const serverStartTime = Date.now();
 
+// Track cache version
+let cacheVersion = null;
+
 /**
  * Format uptime duration in human-readable format
  * @param {number} ms - Milliseconds
@@ -118,7 +121,8 @@ async function handleHealthCheck(req, res, origin) {
       heapTotal: `${(memUsage.heapTotal / 1024 / 1024).toFixed(2)} MB`,
       rss: `${(memUsage.rss / 1024 / 1024).toFixed(2)} MB`
     },
-    version: '1.0.0'
+    version: '1.0.0',
+    cacheVersion: cacheVersion || 'none'
   };
   
   res.writeHead(statusCode, {
@@ -514,6 +518,12 @@ function forwardRequest(req, res, origin) {
 function createProxyServer(port, origin, config = null) {
   // Configure cache limits if config provided
   if (config && config.cache) {
+    // Set cache version if provided
+    if (config.cache.version) {
+      cacheVersion = config.cache.version;
+      console.log(`🏷️  Cache version: ${cacheVersion}`);
+    }
+    
     configureCacheLimits({
       maxEntries: config.cache.maxEntries,
       maxSizeMB: config.cache.maxSizeMB

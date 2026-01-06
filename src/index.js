@@ -20,6 +20,7 @@ program
   .option('-p, --port <number>', 'Port number for the proxy server')
   .option('-o, --origin <url>', 'Origin server URL to forward requests to')
   .option('-c, --config <path>', 'Path to configuration file')
+  .option('--version-tag <string>', 'Cache version tag for versioning support (e.g., "v1", "v2.0", "2024-01")')
   .option('--log-level <level>', 'Set log level: debug, info, warn, error (default: info)')
   .option('--clear-cache', 'Clear the cache')
   .option('--clear-cache-pattern <pattern>', 'Clear cache entries matching pattern (e.g., "/products/*")')
@@ -72,7 +73,8 @@ if (options.clearCache) {
     cliArgs: {
       port: options.port,
       origin: options.origin,
-      logLevel: options.logLevel
+      logLevel: options.logLevel,
+      versionTag: options.versionTag
     }
   });
   
@@ -84,16 +86,17 @@ if (options.clearCache) {
   // Show help if no valid options provided
   console.error('\n❌ Error: Missing required arguments\n');
   console.log('Usage:');
-  console.log('  Start server:   caching-proxy --port <number> --origin <url> [--log-level <level>]');
+  console.log('  Start server:   caching-proxy --port <number> --origin <url> [--version-tag <string>] [--log-level <level>]');
   console.log('  Use config:     caching-proxy --config <path>');
   console.log('  Clear cache:    caching-proxy --clear-cache');
   console.log('  Cache stats:    caching-proxy --cache-stats');
   console.log('  Cache list:     caching-proxy --cache-list\n');
   console.log('Examples:');
   console.log('  caching-proxy --port 3000 --origin http://dummyjson.com');
+  console.log('  caching-proxy --port 3000 --origin http://dummyjson.com --version-tag v1');
   console.log('  caching-proxy --port 3000 --origin http://dummyjson.com --log-level debug');
   console.log('  caching-proxy --config proxy.config.json');
-  console.log('  caching-proxy --config proxy.config.json --port 4000 --log-level warn');
+  console.log('  caching-proxy --config proxy.config.json --version-tag v2.0');
   console.log('  caching-proxy --clear-cache');
   console.log('  caching-proxy --cache-stats');
   console.log('  caching-proxy --cache-list\n');
