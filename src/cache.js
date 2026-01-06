@@ -388,28 +388,36 @@ function shouldCacheResponse(statusCode) {
 
 /**
  * Generate a unique cache key based on request details
- * Format: ORIGIN_HASH:METHOD:URL (including query parameters)
+ * Format: VERSION:ORIGIN_HASH:METHOD:URL (including query parameters)
  * Optionally includes header values for header-based cache differentiation
  * 
  * Examples:
- *   - Without headers: a1b2c3d4:GET:https://dummyjson.com/products/1
- *   - With headers: a1b2c3d4:GET:https://dummyjson.com/products/1:x9y8z7w6
+ *   - With version: v1:a1b2c3d4:GET:https://dummyjson.com/products/1
+ *   - Without version: a1b2c3d4:GET:https://dummyjson.com/products/1
+ *   - With headers: v1:a1b2c3d4:GET:https://dummyjson.com/products/1:x9y8z7w6
  * 
  * @param {string} method - HTTP method (GET, POST, etc.)
  * @param {string} url - Complete URL including query parameters
  * @param {Object} headers - Request headers (optional)
  * @param {string} origin - Origin URL (for multi-origin separation)
+ * @param {string} version - Cache version tag (for version-aware caching)
  * @returns {string} - Unique cache key
  * 
  * If CACHE_KEY_HEADERS is configured, includes a hash of specified header values.
  * This allows different cache entries for different header combinations.
  * 
- * The origin is hashed and prepended to the key to ensure cache separation
- * between different backend origins in multi-origin routing scenarios.
+ * The version is prepended to the key to ensure cache separation between different API versions.
+ * The origin is hashed and included to ensure cache separation between different backend origins.
  */
-function generateCacheKey(method, url, headers = {}, origin = null) {
+function generateCacheKey(method, url, headers = {}, origin = null, version = null) {
   // Normalize method to uppercase for consistency
   const normalizedMethod = method.toUpperCase();
+  
+  // Add version prefix if provided
+  let versionPrefix = '';
+  if (version) {
+    versionPrefix = `${version}:`;
+  }
   
   // Create origin hash prefix if origin is provided
   let originPrefix = '';
@@ -418,8 +426,8 @@ function generateCacheKey(method, url, headers = {}, origin = null) {
     originPrefix = `${originHash}:`;
   }
   
-  // Base cache key format: ORIGIN_HASH:METHOD:URL
-  let cacheKey = `${originPrefix}${normalizedMethod}:${url}`;
+  // Base cache key format: VERSION:ORIGIN_HASH:METHOD:URL
+  let cacheKey = `${versionPrefix}${originPrefix}${normalizedMethod}:${url}`;
   
   // If header-based keys are enabled, append header hash
   if (CACHE_KEY_HEADERS.length > 0 && headers) {
@@ -452,6 +460,7 @@ function generateCacheKey(method, url, headers = {}, origin = null) {
  * @param {string} requestId - Request ID for logging
  * @param {Object} headers - Request headers (for header-based cache keys)
  * @param {string} origin - Origin URL (for multi-origin separation)
+ * @param {string} version - Cache version tag (for version-aware caching)
  * @returns {Object|null} - Cached response object or null if not found
  * 
  * Returns null if cache miss, otherwise returns:
@@ -461,10 +470,10 @@ function generateCacheKey(method, url, headers = {}, origin = null) {
  *   body: string
  * }
  */
-function getCachedResponse(method, url, startTime = Date.now(), requestId = null, headers = {}, origin = null) {
+function getCachedResponse(method, url, startTime = Date.now(), requestId = null, headers = {}, origin = null, version = null) {
   // First try with configured headers only
   // (Vary headers are merged during caching, so the key will include them)
-  const key = generateCacheKey(method, url, headers, origin);
+  const key = generateCacheKey(method, url, headers, origin, version);
   const cache = loadCache();
   const cached = cache.get(key);
   
@@ -563,6 +572,7 @@ function getCachedResponse(method, url, startTime = Date.now(), requestId = null
  * @param {string} url - Complete URL
  * @param {Object} headers - Request headers (for header-based cache keys)
  * @param {string} origin - Origin URL (for multi-origin separation)
+ * @param {string} version - Cache version tag (for version-aware caching)
  * @returns {Object|null} - Stale cache entry with validation headers, or null
  * 
  * Returns an object with:
@@ -576,8 +586,8 @@ function getCachedResponse(method, url, startTime = Date.now(), requestId = null
  * This is used when cache is expired/missing to send conditional requests to origin.
  * If origin returns 304, we can serve the stale content and update timestamp.
  */
-function getStaleEntryForValidation(method, url, headers = {}, origin = null) {
-  const key = generateCacheKey(method, url, headers, origin);
+function getStaleEntryForValidation(method, url, headers = {}, origin = null, version = null) {
+  const key = generateCacheKey(method, url, headers, origin, version);
   const cache = loadCache();
   const cached = cache.get(key);
   
@@ -605,6 +615,7 @@ function getStaleEntryForValidation(method, url, headers = {}, origin = null) {
  * @param {string} url - Complete URL
  * @param {Object} headers - Request headers (for header-based cache keys)
  * @param {string} origin - Origin URL (for multi-origin separation)
+ * @param {string} version - Cache version tag (for version-aware caching)
  * @param {number} ttl - New TTL in milliseconds (optional, uses determineTTL if not provided)
  * @param {string} cacheControl - Cache-Control header from 304 response
  * @returns {boolean} - True if cache was updated, false if entry not found
@@ -613,8 +624,8 @@ function getStaleEntryForValidation(method, url, headers = {}, origin = null) {
  * Updates the cache entry's expiresAt timestamp to extend its life
  * without re-downloading the content.
  */
-function refreshCacheTimestamp(method, url, headers = {}, origin = null, ttl = null, cacheControl = null) {
-  const key = generateCacheKey(method, url, headers, origin);
+function refreshCacheTimestamp(method, url, headers = {}, origin = null, version = null, ttl = null, cacheControl = null) {
+  const key = generateCacheKey(method, url, headers, origin, version);
   const cache = loadCache();
   const cached = cache.get(key);
   
@@ -781,7 +792,7 @@ function isCacheable(cacheControl) {
  *   ❌ NOT CACHED: 4xx client errors (404, 400, 401, etc.)
  *   ❌ NOT CACHED: 5xx server errors (500, 502, 503, etc.)
  */
-function setCachedResponse(method, url, responseData, hasAuth = false, cacheControl = null, requestId = null, requestHeaders = {}, origin = null) {
+function setCachedResponse(method, url, responseData, hasAuth = false, cacheControl = null, requestId = null, requestHeaders = {}, origin = null, version = null) {
   // Only cache GET requests (standard HTTP caching practice)
   if (method.toUpperCase() !== 'GET') {
     console.log(`⏭️  NOT cached (method ${method}): ${method}:${url}`);
@@ -840,7 +851,7 @@ function setCachedResponse(method, url, responseData, hasAuth = false, cacheCont
     }
   });
   
-  const key = generateCacheKey(method, url, headersToUse, origin);
+  const key = generateCacheKey(method, url, headersToUse, origin, version);
   const cache = loadCache();
   
   // Determine TTL based on priority: Cache-Control > Custom Config > Default
@@ -1040,14 +1051,15 @@ function clearCacheByPattern(pattern, dryRun = false) {
  * @param {string} method - HTTP method (default: "GET")
  * @param {boolean} dryRun - If true, only return what would be deleted without deleting
  * @param {string} origin - Origin URL (optional, clears all origins if not specified)
+ * @param {string} version - Cache version tag (optional, clears all versions if not specified)
  * @returns {Object} - { cleared: boolean|number, key: string|null, keys: Array<string> }
  */
-function clearCacheByURL(url, method = 'GET', dryRun = false, origin = null) {
+function clearCacheByURL(url, method = 'GET', dryRun = false, origin = null, version = null) {
   const cache = loadCache();
   
-  if (origin) {
-    // Clear specific origin
-    const key = generateCacheKey(method, url, {}, origin);
+  if (origin && version) {
+    // Clear specific origin and version
+    const key = generateCacheKey(method, url, {}, origin, version);
     
     // Check if the key exists
     if (cache.has(key)) {
@@ -1070,7 +1082,7 @@ function clearCacheByURL(url, method = 'GET', dryRun = false, origin = null) {
       keys: []
     };
   } else {
-    // Clear all origins for this URL
+    // Clear all origins/versions for this URL
     const keysToRemove = [];
     const urlSuffix = `:${method.toUpperCase()}:${url}`;
     

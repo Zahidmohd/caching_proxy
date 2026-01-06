@@ -304,7 +304,7 @@ function forwardRequest(req, res, origin) {
   const startTime = Date.now();
   
   // ✅ Check cache first
-  const cached = getCachedResponse(req.method, fullUrl, startTime, requestId, req.headers, origin);
+  const cached = getCachedResponse(req.method, fullUrl, startTime, requestId, req.headers, origin, cacheVersion);
   
   if (cached) {
     // Cache HIT - serve from cache
@@ -344,7 +344,7 @@ function forwardRequest(req, res, origin) {
   console.log(`📤 ${req.method} ${targetUrl.pathname}${targetUrl.search}`);
   
   // Check for stale cache entry with validation headers (ETag/Last-Modified)
-  const staleEntry = getStaleEntryForValidation(req.method, fullUrl, req.headers, origin);
+  const staleEntry = getStaleEntryForValidation(req.method, fullUrl, req.headers, origin, cacheVersion);
   
   // Choose http or https based on origin protocol
   const client = originUrl.protocol === 'https:' ? https : http;
@@ -388,10 +388,10 @@ function forwardRequest(req, res, origin) {
       const cacheControl = proxyRes.headers['cache-control'];
       
       // Refresh cache timestamp to extend TTL
-      refreshCacheTimestamp(req.method, fullUrl, req.headers, origin, null, cacheControl);
+      refreshCacheTimestamp(req.method, fullUrl, req.headers, origin, cacheVersion, null, cacheControl);
       
       // Get the cached content (now with refreshed timestamp)
-      const freshContent = getCachedResponse(req.method, fullUrl, startTime, requestId, req.headers, origin);
+      const freshContent = getCachedResponse(req.method, fullUrl, startTime, requestId, req.headers, origin, cacheVersion);
       
       if (freshContent) {
         // Calculate response time
@@ -492,7 +492,7 @@ function forwardRequest(req, res, origin) {
         statusCode: proxyRes.statusCode,
         headers: proxyRes.headers, // Store original headers (without X-Cache)
         body: responseBody
-      }, hasAuth, cacheControl, requestId, req.headers, origin);
+      }, hasAuth, cacheControl, requestId, req.headers, origin, cacheVersion);
     });
   });
   
