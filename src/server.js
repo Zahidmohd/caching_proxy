@@ -6,7 +6,7 @@
 const http = require('http');
 const https = require('https');
 const { URL } = require('url');
-const { getCachedResponse, getStaleEntryForValidation, setCachedResponse, getCacheStats, configureCacheLimits, configurePatternTTL, configureCompression, configureCacheKeyHeaders } = require('./cache');
+const { getCachedResponse, getStaleEntryForValidation, refreshCacheTimestamp, setCachedResponse, getCacheStats, configureCacheLimits, configurePatternTTL, configureCompression, configureCacheKeyHeaders } = require('./cache');
 const { getStats } = require('./analytics');
 const logger = require('./logger');
 
@@ -366,6 +366,62 @@ function forwardRequest(req, res, origin) {
   // Forward the request to origin server
   const proxyReq = client.request(options, (proxyRes) => {
     console.log(`📥 ${proxyRes.statusCode} ${req.method} ${targetUrl.pathname}${targetUrl.search}`);
+    
+    // ✅ Handle 304 Not Modified response (conditional request validation)
+    if (proxyRes.statusCode === 304 && staleEntry) {
+      console.log(`✅ 304 Not Modified - content unchanged, serving from cache`);
+      
+      // Get Cache-Control from 304 response (for TTL refresh)
+      const cacheControl = proxyRes.headers['cache-control'];
+      
+      // Refresh cache timestamp to extend TTL
+      refreshCacheTimestamp(req.method, fullUrl, req.headers, null, cacheControl);
+      
+      // Get the cached content (now with refreshed timestamp)
+      const freshContent = getCachedResponse(req.method, fullUrl, startTime, requestId, req.headers);
+      
+      if (freshContent) {
+        // Calculate response time
+        const responseTime = Date.now() - startTime;
+        
+        // Calculate bandwidth saved
+        const savedBytes = Buffer.byteLength(freshContent.body, 'utf8');
+        
+        // Serve cached content with 200 status and REVALIDATED header
+        const revalidatedHeaders = {
+          ...freshContent.headers,
+          'x-cache': 'REVALIDATED',
+          'x-request-id': requestId
+        };
+        
+        res.writeHead(200, revalidatedHeaders);
+        res.end(freshContent.body);
+        
+        // Log access event
+        logger.logAccess({
+          method: req.method,
+          url: fullUrl,
+          statusCode: 200,
+          cacheStatus: 'REVALIDATED',
+          responseTime,
+          requestId
+        });
+        
+        console.log(`📊 Bandwidth saved: ${savedBytes} bytes (${(savedBytes / 1024).toFixed(2)} KB)`);
+      } else {
+        // Fallback: if we can't get cached content, return 304 to client
+        console.log(`⚠️  Warning: 304 received but cached content not available`);
+        const responseHeaders = {
+          ...proxyRes.headers,
+          'x-cache': 'REVALIDATED',
+          'x-request-id': requestId
+        };
+        res.writeHead(304, responseHeaders);
+        res.end();
+      }
+      
+      return; // Don't continue with normal response handling
+    }
     
     // ✅ Add X-Cache: MISS header to indicate response is from origin server
     const responseHeaders = {

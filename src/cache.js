@@ -587,6 +587,49 @@ function getStaleEntryForValidation(method, url, headers = {}) {
 }
 
 /**
+ * Update cache timestamp after 304 Not Modified response
+ * @param {string} method - HTTP method
+ * @param {string} url - Complete URL
+ * @param {Object} headers - Request headers (for header-based cache keys)
+ * @param {number} ttl - New TTL in milliseconds (optional, uses determineTTL if not provided)
+ * @param {string} cacheControl - Cache-Control header from 304 response
+ * @returns {boolean} - True if cache was updated, false if entry not found
+ * 
+ * Called when origin responds with 304 Not Modified.
+ * Updates the cache entry's expiresAt timestamp to extend its life
+ * without re-downloading the content.
+ */
+function refreshCacheTimestamp(method, url, headers = {}, ttl = null, cacheControl = null) {
+  const key = generateCacheKey(method, url, headers);
+  const cache = loadCache();
+  const cached = cache.get(key);
+  
+  if (!cached) {
+    console.log(`⚠️  Cannot refresh: cache entry not found for ${key}`);
+    return false;
+  }
+  
+  // Determine new TTL
+  const newTTL = ttl || determineTTL(url, cacheControl);
+  
+  // Update timestamps
+  const now = Date.now();
+  cached.cachedAt = now;
+  cached.expiresAt = now + newTTL;
+  cached.lastAccessTime = now;
+  
+  // Save updated cache
+  cache.set(key, cached);
+  saveCache(cache);
+  
+  const ttlMinutes = Math.floor(newTTL / 60000);
+  const ttlDisplay = ttlMinutes > 0 ? `${ttlMinutes}min` : `${Math.floor(newTTL / 1000)}s`;
+  console.log(`🔄 Cache refreshed: ${key} (new TTL: ${ttlDisplay})`);
+  
+  return true;
+}
+
+/**
  * Calculate cache size in bytes
  * @param {Map} cache - Cache map
  * @returns {number} - Total size in bytes
@@ -1135,6 +1178,7 @@ module.exports = {
   generateCacheKey,
   getCachedResponse,
   getStaleEntryForValidation,
+  refreshCacheTimestamp,
   setCachedResponse,
   clearCache,
   clearCacheByPattern,
