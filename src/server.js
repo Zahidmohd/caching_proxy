@@ -806,31 +806,104 @@ function createProxyServer(port, origin, config = null) {
     server = http.createServer(requestHandler);
   }
 
-  server.listen(port, () => {
-    const protocol = httpsEnabled ? 'https' : 'http';
-    console.log(`✅ Proxy server is running on ${protocol}://localhost:${port}`);
+  // Check for dual mode configuration
+  const httpPort = config && config.server.httpPort;
+  const isDualMode = httpsEnabled && httpPort;
+  
+  let httpsServer = null;
+  let httpServer = null;
+  let servers = [];
+  
+  if (isDualMode) {
+    // Dual mode: Run both HTTP and HTTPS servers
+    console.log(`🔀 Dual mode: Starting both HTTP and HTTPS servers`);
     
-    if (isMultiOriginEnabled()) {
-      console.log(`📡 Multi-origin routing enabled`);
-    } else if (origin) {
-      console.log(`📡 Forwarding requests to: ${origin}`);
-    }
+    // Create HTTPS server
+    const httpsOptions = {
+      cert: fs.readFileSync(config.server.https.certPath),
+      key: fs.readFileSync(config.server.https.keyPath)
+    };
+    httpsServer = https.createServer(httpsOptions, requestHandler);
+    servers.push({ server: httpsServer, type: 'HTTPS', port: port });
     
-    console.log(`\n🎯 Try: curl ${protocol}://localhost:${port}/test\n`);
+    // Create HTTP server
+    httpServer = http.createServer(requestHandler);
+    servers.push({ server: httpServer, type: 'HTTP', port: httpPort });
+    
+    // Start HTTPS server
+    httpsServer.listen(port, () => {
+      console.log(`🔒 HTTPS server is running on https://localhost:${port}`);
+    });
+    
+    // Start HTTP server
+    httpServer.listen(httpPort, () => {
+      console.log(`✅ HTTP server is running on http://localhost:${httpPort}`);
+      
+      // Show summary after both servers start
+      setTimeout(() => {
+        console.log(`\n🎯 Dual mode active:`);
+        console.log(`   HTTP:  curl http://localhost:${httpPort}/test`);
+        console.log(`   HTTPS: curl -k https://localhost:${port}/test`);
+        
+        if (isMultiOriginEnabled()) {
+          console.log(`\n📡 Multi-origin routing enabled`);
+        } else if (origin) {
+          console.log(`\n📡 Forwarding requests to: ${origin}`);
+        }
+        console.log();
+      }, 100);
+    });
+    
+  } else {
+    // Single mode (HTTP or HTTPS only)
+    server.listen(port, () => {
+      const protocol = httpsEnabled ? 'https' : 'http';
+      console.log(`✅ Proxy server is running on ${protocol}://localhost:${port}`);
+      
+      if (isMultiOriginEnabled()) {
+        console.log(`📡 Multi-origin routing enabled`);
+      } else if (origin) {
+        console.log(`📡 Forwarding requests to: ${origin}`);
+      }
+      
+      console.log(`\n🎯 Try: curl ${protocol}://localhost:${port}/test\n`);
+    });
+    
+    servers.push({ server: server, type: httpsEnabled ? 'HTTPS' : 'HTTP', port: port });
+  }
+
+  // Handle server errors for all servers
+  servers.forEach(({ server: srv, type, port: srvPort }) => {
+    srv.on('error', (error) => {
+      if (error.code === 'EADDRINUSE') {
+        console.error(`\n❌ Error: ${type} port ${srvPort} is already in use`);
+        console.error('   Please choose a different port or stop the process using this port.\n');
+      } else {
+        console.error(`\n❌ ${type} Server Error: ${error.message}\n`);
+      }
+      process.exit(1);
+    });
   });
 
-  // Handle server errors
-  server.on('error', (error) => {
-    if (error.code === 'EADDRINUSE') {
-      console.error(`\n❌ Error: Port ${port} is already in use`);
-      console.error('   Please choose a different port or stop the process using this port.\n');
-    } else {
-      console.error(`\n❌ Server Error: ${error.message}\n`);
-    }
-    process.exit(1);
+  // Graceful shutdown for all servers
+  process.on('SIGTERM', () => {
+    console.log('\n🛑 Shutting down proxy server(s)...');
+    
+    let closedCount = 0;
+    const totalServers = servers.length;
+    
+    servers.forEach(({ server: srv }) => {
+      srv.close(() => {
+        closedCount++;
+        if (closedCount === totalServers) {
+          console.log('✅ All servers closed');
+          process.exit(0);
+        }
+      });
+    });
   });
 
-  return server;
+  return httpsServer || server;
 }
 
 module.exports = {

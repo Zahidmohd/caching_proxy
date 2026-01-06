@@ -13,6 +13,7 @@ const DEFAULT_CONFIG = {
   server: {
     port: 3000,
     host: 'localhost',
+    httpPort: null, // If set with HTTPS enabled, runs both HTTP and HTTPS servers
     https: {
       enabled: false,
       certPath: null,
@@ -305,6 +306,9 @@ function loadConfig(options = {}) {
   if (cliArgs.keyPath) {
     config.server.https.keyPath = cliArgs.keyPath;
   }
+  if (cliArgs.httpPort) {
+    config.server.httpPort = parseInt(cliArgs.httpPort, 10);
+  }
   
   // Validate configuration
   const validation = validateConfig(config);
@@ -326,12 +330,25 @@ function loadConfig(options = {}) {
  */
 function displayConfigSummary(config) {
   console.log('\n⚙️  Configuration Summary:');
-  const protocol = config.server.https?.enabled ? 'https' : 'http';
-  console.log(`   Server:    ${protocol}://${config.server.host}:${config.server.port}`);
-  if (config.server.https?.enabled) {
+  
+  // Check if dual mode (both HTTP and HTTPS)
+  const isDualMode = config.server.https?.enabled && config.server.httpPort;
+  
+  if (isDualMode) {
+    console.log(`   Server:    Dual Mode (HTTP + HTTPS)`);
+    console.log(`   HTTP:      http://${config.server.host}:${config.server.httpPort}`);
+    console.log(`   HTTPS:     https://${config.server.host}:${config.server.port}`);
     console.log(`   🔒 HTTPS:   Enabled`);
     console.log(`   Certificate: ${config.server.https.certPath}`);
     console.log(`   Private Key: ${config.server.https.keyPath}`);
+  } else {
+    const protocol = config.server.https?.enabled ? 'https' : 'http';
+    console.log(`   Server:    ${protocol}://${config.server.host}:${config.server.port}`);
+    if (config.server.https?.enabled) {
+      console.log(`   🔒 HTTPS:   Enabled`);
+      console.log(`   Certificate: ${config.server.https.certPath}`);
+      console.log(`   Private Key: ${config.server.https.keyPath}`);
+    }
   }
   console.log(`   Origin:    ${config.server.origin}`);
   console.log(`   Cache TTL: ${config.cache.defaultTTL}s`);
