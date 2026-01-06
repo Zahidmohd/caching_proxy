@@ -670,6 +670,9 @@ async function forwardRequest(req, res, origin) {
  * @returns {http.Server} - HTTP server instance
  */
 function createProxyServer(port, origin, config = null) {
+  // Store server start time for uptime calculation (used by dashboard)
+  global.serverStartTime = Date.now();
+  
   // Store config for use in request handlers
   serverConfig = config;
   

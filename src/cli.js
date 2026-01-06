@@ -12,6 +12,7 @@ const { createProxyServer } = require('./server');
 const { clearCache, clearCacheByPattern, clearCacheByURL, clearCacheOlderThan, getCacheStats, setCachedResponse, generateCacheKey } = require('./cache');
 const { getStats } = require('./analytics');
 const { displayConfigSummary } = require('./config');
+const { createDashboardServer } = require('./dashboard');
 
 /**
  * Validate port number
@@ -89,6 +90,12 @@ function startServer(port, origin, config = null) {
   
   // Create and start the proxy server
   createProxyServer(validPort, validOrigin, config);
+  
+  // Start dashboard if configured
+  if (config && config.server && config.server.dashboardPort) {
+    const dashboardPort = config.server.dashboardPort;
+    createDashboardServer(dashboardPort, config);
+  }
 }
 
 /**

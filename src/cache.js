@@ -1432,6 +1432,51 @@ function getCacheStats() {
   };
 }
 
+/**
+ * Get all cached entries for dashboard display
+ * @returns {Array} Array of cache entries with metadata
+ */
+function getAllCachedEntries() {
+  const cache = loadCache();
+  const entries = [];
+  
+  for (const [key, entry] of cache.entries()) {
+    entries.push({
+      key: key,
+      url: entry.url || key,
+      method: entry.method || 'GET',
+      statusCode: entry.statusCode,
+      body: entry.body,
+      cachedAt: entry.cachedAt,
+      expiresAt: entry.expiresAt,
+      lastAccessTime: entry.lastAccessTime
+    });
+  }
+  
+  // Sort by most recently accessed
+  entries.sort((a, b) => (b.lastAccessTime || 0) - (a.lastAccessTime || 0));
+  
+  return entries;
+}
+
+/**
+ * Delete a specific cache entry by key
+ * @param {string} cacheKey - The cache key to delete
+ * @returns {boolean} True if deleted, false if not found
+ */
+function deleteCacheEntry(cacheKey) {
+  const cache = loadCache();
+  
+  if (cache.has(cacheKey)) {
+    cache.delete(cacheKey);
+    saveCache(cache);
+    console.log(`🗑️  Deleted cache entry: ${cacheKey}`);
+    return true;
+  }
+  
+  return false;
+}
+
 module.exports = {
   generateCacheKey,
   getCachedResponse,
@@ -1443,6 +1488,8 @@ module.exports = {
   clearCacheByURL,
   clearCacheOlderThan,
   getCacheStats,
+  getAllCachedEntries,
+  deleteCacheEntry,
   shouldCacheResponse,
   configureCacheLimits,
   configureCompression,

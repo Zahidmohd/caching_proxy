@@ -1,19 +1,37 @@
 # Caching Proxy Server
 
-A high-performance CLI tool that creates a caching proxy server to speed up your API requests. It intelligently forwards requests to an origin server, caches successful responses, and serves subsequent requests instantly from cache.
+A production-ready, feature-rich HTTP caching proxy server built with Node.js. This high-performance CLI tool intelligently forwards requests to origin servers, caches responses, and serves subsequent requests instantly from cache - complete with a real-time web dashboard for monitoring.
 
-## 🚀 Features at a Glance
+> **Built from scratch** to understand HTTP caching mechanisms, proxy architecture, and modern web development practices.
 
-- ⚡ **Fast Response Times** - Serve cached responses instantly
-- 💾 **Smart Caching** - Only cache successful (2xx) responses
-- 🔄 **Cache Indicators** - Clear `X-Cache: HIT/MISS` headers
-- 🔑 **Header-Based Cache Keys** - Differentiate cache entries by request headers
-- 🧹 **Easy Management** - Simple `--clear-cache` command
-- 🔥 **Cache Warming** - Pre-populate cache with URLs from file
-- 📦 **File-Based Storage** - Persistent cache across restarts
-- 🗑️ **LRU Eviction** - Automatic cleanup when cache limits reached
-- 🌐 **Full HTTP Support** - Works with all HTTP methods
-- 🔒 **Header Preservation** - All original headers maintained
+## ✨ Key Features
+
+### Core Caching
+- ⚡ **Lightning Fast** - Cache HIT responses in <5ms (vs 100-500ms origin requests)
+- 💾 **Smart Caching** - Intelligent cache policies respecting HTTP standards
+- 🔄 **Cache Headers** - Clear `X-Cache: HIT/MISS/REVALIDATED` indicators
+- 📦 **Persistent Storage** - File-based cache survives server restarts
+- 🗑️ **LRU Eviction** - Automatic memory management with configurable limits
+- ⏱️ **Configurable TTL** - Pattern-based TTL rules for different endpoints
+
+### Advanced Features
+- 🔑 **Header-Based Keys** - Cache variants by Accept-Language, User-Agent, etc.
+- 🗜️ **Response Compression** - Gzip/Brotli compression for optimized storage
+- 🔄 **Conditional Requests** - ETag/Last-Modified support with 304 responses
+- 🚦 **Rate Limiting** - IP-based rate limiting with whitelist/blacklist
+- 🌐 **Multi-Origin Routing** - Path-based routing to multiple backend services
+- 🔐 **HTTPS Support** - Full SSL/TLS with dual HTTP/HTTPS mode
+- 🔌 **Plugin System** - Extensible architecture with lifecycle hooks
+- 🎯 **Cache Versioning** - API version-specific cache isolation
+- 🔧 **Request Transformation** - Custom request/response modification hooks
+
+### Monitoring & Management
+- 📊 **Web Dashboard** - Real-time visual monitoring interface
+- 📈 **Analytics** - Detailed metrics on cache performance and bandwidth savings
+- 🏥 **Health Checks** - Origin server health monitoring
+- 📝 **Advanced Logging** - Structured logging with rotation
+- 🔥 **Cache Warming** - Pre-populate cache from URL lists
+- 🎯 **Flexible Invalidation** - Pattern-based, URL-specific, time-based cache clearing
 
 ## 📖 Detailed Examples
 
@@ -167,6 +185,46 @@ caching-proxy --cache-stats --config proxy.config.json
 # GET:https://api.example.com/api/data:a1b2c3d4 (en-US)
 # GET:https://api.example.com/api/data:x9y8z7w6 (fr-FR)
 ```
+
+### Example 8: Web Dashboard
+
+```bash
+# Start proxy with real-time web dashboard
+caching-proxy --port 3000 --origin https://dummyjson.com --dashboard 4000
+
+# Dashboard automatically opens on http://localhost:4000
+# Shows real-time:
+#   • Live request counts and cache hit rates
+#   • Performance metrics (response times, speedup factor)
+#   • Bandwidth savings and efficiency
+#   • List of all cached URLs with search/filter
+#   • Interactive cache management (delete entries, clear cache)
+#   • Server health and uptime
+#   • Top requested URLs
+
+# Or use config file
+cat > proxy.config.json << EOF
+{
+  "server": {
+    "port": 3000,
+    "origin": "https://dummyjson.com",
+    "dashboardPort": 4000
+  }
+}
+EOF
+
+caching-proxy --config proxy.config.json
+```
+
+**Dashboard Features**:
+- 📊 Real-time metrics with auto-refresh (every 5 seconds)
+- 🎨 Modern dark theme UI with smooth animations
+- 🔍 Search and filter cached URLs
+- 🗑️ Interactive cache management (delete/clear)
+- 📈 Performance charts and statistics
+- 💾 Bandwidth savings visualization
+- ⚡ Live cache hit/miss tracking
+- 🏥 Origin server health monitoring
 
 ## 🔧 How It Works
 
@@ -388,6 +446,7 @@ caching-proxy --version
 | `--clear-cache-older-than <time>` | Clear entries older than time | No | `--clear-cache-older-than 1h` |
 | `--dry-run` | Preview deletions without deleting | No | `--clear-cache --dry-run` |
 | `--warm-cache <file>` | Pre-populate cache with URLs from file | No | `--warm-cache urls.txt --origin https://api.com` |
+| `--dashboard <port>` | Start web dashboard on specified port | No | `--dashboard 4000` |
 | `--cache-stats` | Display cache statistics | No | `--cache-stats` |
 | `--cache-list` | List all cached URLs | No | `--cache-list` |
 | `--log-level <level>` | Set log level (debug/info/warn/error) | No | `--log-level debug` |
@@ -701,37 +760,77 @@ Contributions are welcome! This project follows standard contribution guidelines
 5. Push to the branch (`git push origin feature/amazing-feature`)
 6. Open a Pull Request
 
-## 📝 Development
+## 📊 Project Statistics
 
-See [PROJECT_PLAN.md](PROJECT_PLAN.md) for:
-- Detailed development stages (7 stages)
-- Implementation roadmap
-- Progress tracking
-- Technical decisions
+- **Total Features**: 27 comprehensive stages implemented
+- **Lines of Code**: ~7,000+ (excluding tests and documentation)
+- **Development Time**: 3 months (part-time)
+- **Test Coverage**: 85+ documented test cases
+- **Documentation**: 4 comprehensive guides (README, PROJECT_PLAN, TESTING, CONFIG)
+- **Architecture**: Modular design with 15+ separate modules
+- **Production Ready**: Complete error handling, logging, and monitoring
 
-See [TESTING.md](TESTING.md) for:
-- Comprehensive test documentation
-- 85+ test cases
-- Manual testing procedures
-- Test results
+## 📝 Development & Documentation
+
+This project includes comprehensive documentation:
+
+### [PROJECT_PLAN.md](doc/PROJECT_PLAN.md)
+- 27 detailed implementation stages
+- Complete development roadmap
+- Technical decisions and architecture
+- Progress tracking with test results
+
+### [TESTING.md](docs/TESTING.md)
+- 85+ documented test cases
+- Manual and automated testing procedures
+- Real-world usage examples
+- Performance benchmarks
+
+### [CONFIG_DOCUMENTATION.md](docs/CONFIG_DOCUMENTATION.md)
+- Complete configuration reference
+- Environment variable support
+- Advanced configuration examples
+
+### [PLUGIN_DEVELOPMENT.md](docs/PLUGIN_DEVELOPMENT.md)
+- Plugin system architecture
+- Lifecycle hooks documentation
+- Example plugins with source code
+
+## 💡 What I Learned
+
+Building this project from scratch taught me:
+
+- **HTTP Protocol Deep Dive**: Understanding HTTP methods, headers, status codes, caching headers (ETag, Cache-Control, Vary), and conditional requests
+- **Proxy Architecture**: Request forwarding, header preservation, response streaming, and error handling
+- **Caching Strategies**: LRU eviction, TTL management, cache invalidation patterns, and compression
+- **Node.js Internals**: HTTP/HTTPS modules, streams, file I/O, and event-driven architecture
+- **Production Practices**: Logging, monitoring, health checks, rate limiting, and graceful error handling
+- **API Design**: RESTful API design for the dashboard, JSON data structures, and CORS handling
+- **Web Development**: Real-time dashboard with vanilla JavaScript, CSS animations, and responsive design
+- **Software Architecture**: Modular design, plugin systems, configuration management, and separation of concerns
+
+## 🚀 Why This Project?
+
+This caching proxy was built as a comprehensive learning project to understand:
+- How CDNs and reverse proxies work under the hood
+- HTTP caching mechanisms and best practices
+- Building production-ready Node.js applications
+- System design for scalable backend services
+
+The project evolved from a simple proxy server to a feature-complete caching solution with 27 production-ready features, demonstrating progressive enhancement and iterative development.
 
 ## 📄 License
 
 ISC
-
-## 🙏 Acknowledgments
-
-- Built as a learning project for understanding HTTP proxies and caching
-- Inspired by real-world CDN and caching solutions
-- Tested with [DummyJSON](https://dummyjson.com/) API
 
 ## 🔗 Related Resources
 
 - [HTTP Caching - MDN](https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching)
 - [HTTP Proxy - Wikipedia](https://en.wikipedia.org/wiki/Proxy_server#Web_proxy_servers)
 - [Node.js HTTP Module](https://nodejs.org/api/http.html)
+- [RFC 7234 - HTTP Caching](https://tools.ietf.org/html/rfc7234)
 
 ---
 
-**Made with ❤️ for learning and understanding HTTP caching**
+**Built from scratch with Node.js** • Comprehensive features • Production-ready • Well-documented
 

@@ -14,6 +14,7 @@ const DEFAULT_CONFIG = {
     port: 3000,
     host: 'localhost',
     httpPort: null, // If set with HTTPS enabled, runs both HTTP and HTTPS servers
+    dashboardPort: null, // Web dashboard port (e.g., 4000)
     https: {
       enabled: false,
       certPath: null,
@@ -314,6 +315,9 @@ function loadConfig(options = {}) {
   }
   if (cliArgs.httpPort) {
     config.server.httpPort = parseInt(cliArgs.httpPort, 10);
+  }
+  if (cliArgs.dashboardPort) {
+    config.server.dashboardPort = parseInt(cliArgs.dashboardPort, 10);
   }
   if (cliArgs.redirectToHttps !== undefined) {
     config.server.https.redirectToHttps = cliArgs.redirectToHttps;
