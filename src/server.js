@@ -13,6 +13,7 @@ const { configureRateLimit, getClientIP, checkRateLimit, recordRequest, startCle
 const { configureRouter, matchOrigin, isMultiOriginEnabled, getRoutingTable } = require('./router');
 const { configureHealthCheck, startHealthChecks, getAllHealthStatuses, isHealthCheckEnabled } = require('./healthCheck');
 const { checkVersionChange, clearVersionCache } = require('./versionManager');
+const { configureTransformations, applyBeforeRequest, applyAfterResponse, isTransformationEnabled } = require('./transformations');
 const logger = require('./logger');
 
 // Track server start time for uptime
@@ -295,7 +296,7 @@ async function handleReadinessCheck(req, res, origin) {
  * @param {http.ServerResponse} res - Response object
  * @param {string} origin - Origin server URL
  */
-function forwardRequest(req, res, origin) {
+async function forwardRequest(req, res, origin) {
   const originUrl = new URL(origin);
   const targetUrl = new URL(req.url, origin); // Preserves path and query params
   const fullUrl = `${origin}${req.url}`;
@@ -382,7 +383,7 @@ function forwardRequest(req, res, origin) {
     }
   }
   
-  const options = {
+  let options = {
     hostname: originUrl.hostname,
     port: originUrl.port || (originUrl.protocol === 'https:' ? 443 : 80),
     path: targetUrl.pathname + targetUrl.search, // ✅ Preserves query parameters
@@ -390,8 +391,31 @@ function forwardRequest(req, res, origin) {
     headers: requestHeaders
   };
   
+  // Apply beforeRequest transformation if enabled
+  const transformEnabled = isTransformationEnabled();
+  if (transformEnabled.beforeRequest) {
+    try {
+      const transformedRequest = await applyBeforeRequest({
+        method: options.method,
+        url: fullUrl,
+        path: options.path,
+        headers: options.headers,
+        body: null // Body handling can be added if needed
+      });
+      
+      // Apply transformed values
+      if (transformedRequest.method) options.method = transformedRequest.method;
+      if (transformedRequest.path) options.path = transformedRequest.path;
+      if (transformedRequest.headers) options.headers = transformedRequest.headers;
+      
+      console.log(`🔧 Applied beforeRequest transformation`);
+    } catch (error) {
+      console.error(`❌ Error applying beforeRequest transformation:`, error.message);
+    }
+  }
+  
   // Forward the request to origin server
-  const proxyReq = client.request(options, (proxyRes) => {
+  const proxyReq = client.request(options, async (proxyRes) => {
     console.log(`📥 ${proxyRes.statusCode} ${req.method} ${targetUrl.pathname}${targetUrl.search}`);
     
     // ✅ Handle 304 Not Modified response (conditional request validation)
@@ -469,10 +493,38 @@ function forwardRequest(req, res, origin) {
     
     proxyRes.on('data', (chunk) => {
       responseBody += chunk;
-      res.write(chunk); // Forward to client
     });
     
-    proxyRes.on('end', () => {
+    proxyRes.on('end', async () => {
+      // Apply afterResponse transformation if enabled
+      let finalBody = responseBody;
+      let finalHeaders = { ...proxyRes.headers };
+      let finalStatusCode = proxyRes.statusCode;
+      
+      if (transformEnabled.afterResponse) {
+        try {
+          const transformedResponse = await applyAfterResponse({
+            statusCode: proxyRes.statusCode,
+            headers: { ...proxyRes.headers },
+            body: responseBody
+          });
+          
+          // Apply transformed values
+          if (transformedResponse.statusCode) finalStatusCode = transformedResponse.statusCode;
+          if (transformedResponse.headers) finalHeaders = transformedResponse.headers;
+          if (transformedResponse.body !== undefined) finalBody = transformedResponse.body;
+          
+          console.log(`🔧 Applied afterResponse transformation`);
+        } catch (error) {
+          console.error(`❌ Error applying afterResponse transformation:`, error.message);
+        }
+      }
+      
+      // Send response to client (use transformed values if available)
+      if (finalStatusCode !== proxyRes.statusCode || finalHeaders !== proxyRes.headers) {
+        res.writeHead(finalStatusCode, finalHeaders);
+      }
+      res.write(finalBody);
       res.end();
       
       // Calculate response time
@@ -616,6 +668,11 @@ function createProxyServer(port, origin, config = null) {
       logger.setLogFormat(config.logging.format);
       console.log(`📝 Log format set to: ${config.logging.format}`);
     }
+  }
+  
+  // Configure transformations if provided
+  if (config && config.transformations) {
+    configureTransformations(config.transformations);
   }
   
   // Configure rate limiting if config provided

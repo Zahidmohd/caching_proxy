@@ -56,6 +56,10 @@ const DEFAULT_CONFIG = {
     file: './cache/analytics.json',
     trackPerformance: true,
     trackBandwidth: true
+  },
+  transformations: {
+    beforeRequest: null,  // Path to JavaScript file for request transformation
+    afterResponse: null   // Path to JavaScript file for response transformation
   }
 };
 
@@ -371,6 +375,14 @@ function displayConfigSummary(config) {
   if (config.logging) {
     console.log(`   Log Level: ${config.logging.level || 'info'}`);
     console.log(`   Log Format: ${config.logging.format || 'text'}`);
+  }
+  if (config.transformations) {
+    if (config.transformations.beforeRequest) {
+      console.log(`   🔧 beforeRequest: ${config.transformations.beforeRequest}`);
+    }
+    if (config.transformations.afterResponse) {
+      console.log(`   🔧 afterResponse: ${config.transformations.afterResponse}`);
+    }
   }
   console.log();
 }
