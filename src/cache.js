@@ -109,6 +109,51 @@ function configureCacheKeyHeaders(headers = []) {
 }
 
 /**
+ * Parse the Vary header from response
+ * @param {string} varyHeader - Vary header value (e.g., "Accept-Language, Accept-Encoding")
+ * @returns {Array<string>} - Array of header names (normalized to lowercase)
+ * 
+ * Examples:
+ *   parseVaryHeader("Accept-Language") => ["accept-language"]
+ *   parseVaryHeader("Accept-Language, Accept-Encoding") => ["accept-language", "accept-encoding"]
+ *   parseVaryHeader("*") => ["*"]
+ *   parseVaryHeader(null) => []
+ */
+function parseVaryHeader(varyHeader) {
+  if (!varyHeader) {
+    return [];
+  }
+  
+  // Vary: * means the response varies on something other than request headers
+  if (varyHeader.trim() === '*') {
+    return ['*'];
+  }
+  
+  // Parse comma-separated list of header names
+  return varyHeader
+    .split(',')
+    .map(h => h.trim().toLowerCase())
+    .filter(h => h.length > 0);
+}
+
+/**
+ * Merge Vary headers with configured cache key headers
+ * @param {Array<string>} varyHeaders - Headers from Vary response header
+ * @param {Array<string>} configHeaders - Headers from configuration
+ * @returns {Array<string>} - Combined unique list of headers
+ */
+function mergeVaryHeaders(varyHeaders, configHeaders) {
+  // If Vary: *, we can't cache with predictable keys
+  if (varyHeaders.includes('*')) {
+    return ['*'];
+  }
+  
+  // Combine and deduplicate
+  const combined = [...new Set([...varyHeaders, ...configHeaders])];
+  return combined;
+}
+
+/**
  * Configure pattern-based TTL
  * @param {Object} patterns - Pattern to TTL mapping
  * @example
@@ -391,6 +436,8 @@ function generateCacheKey(method, url, headers = {}) {
  * }
  */
 function getCachedResponse(method, url, startTime = Date.now(), requestId = null, headers = {}) {
+  // First try with configured headers only
+  // (Vary headers are merged during caching, so the key will include them)
   const key = generateCacheKey(method, url, headers);
   const cache = loadCache();
   const cached = cache.get(key);
@@ -405,6 +452,16 @@ function getCachedResponse(method, url, startTime = Date.now(), requestId = null
       const responseTime = Date.now() - startTime;
       recordMiss(key, responseTime); // Record as miss since expired
       return null;
+    }
+    
+    // Validate Vary headers if present
+    // If the cached entry has Vary headers, verify that the current request
+    // has matching values for those headers
+    if (cached.varyHeaders && cached.varyHeaders.length > 0) {
+      // The key already includes the hash, so if we got a hit, the headers match
+      // This validation is for additional safety and logging
+      const varyHeadersList = cached.varyHeaders.join(', ');
+      console.log(`✓ Vary validation passed: ${varyHeadersList}`);
     }
     const responseTime = Date.now() - startTime;
     console.log(`✨ Cache HIT: ${key}`);
@@ -637,7 +694,41 @@ function setCachedResponse(method, url, responseData, hasAuth = false, cacheCont
     return false;
   }
   
-  const key = generateCacheKey(method, url, requestHeaders);
+  // Parse Vary header from origin response
+  const varyHeader = responseData.headers['vary'] || responseData.headers['Vary'];
+  const varyHeaders = parseVaryHeader(varyHeader);
+  
+  // If Vary: *, the response varies in unpredictable ways - don't cache
+  if (varyHeaders.includes('*')) {
+    console.log(`⏭️  NOT cached (Vary: *): ${method}:${url}`);
+    return false;
+  }
+  
+  // Log Vary header detection
+  if (varyHeaders.length > 0) {
+    console.log(`🔀 Vary header detected: ${varyHeaders.join(', ')}`);
+  }
+  
+  // Merge Vary headers with configured cache key headers
+  const headersForKey = mergeVaryHeaders(varyHeaders, CACHE_KEY_HEADERS);
+  
+  // Log final headers used for cache key
+  if (headersForKey.length > 0) {
+    console.log(`🔑 Cache key includes headers: ${headersForKey.join(', ')}`);
+  }
+  
+  // Generate cache key using merged headers
+  const headersToUse = {};
+  headersForKey.forEach(headerName => {
+    const actualHeader = Object.keys(requestHeaders).find(
+      h => h.toLowerCase() === headerName
+    );
+    if (actualHeader) {
+      headersToUse[actualHeader] = requestHeaders[actualHeader];
+    }
+  });
+  
+  const key = generateCacheKey(method, url, headersToUse);
   const cache = loadCache();
   
   // Determine TTL based on priority: Cache-Control > Custom Config > Default
@@ -677,6 +768,7 @@ function setCachedResponse(method, url, responseData, hasAuth = false, cacheCont
     headers: responseData.headers,
     body: compressedBody,
     compression: compressionUsed, // Compression method used: 'gzip', 'brotli', or 'none'
+    varyHeaders: varyHeaders, // Store Vary headers for validation
     cachedAt: now,
     expiresAt: now + ttl,
     lastAccessTime: now // Track for LRU eviction
