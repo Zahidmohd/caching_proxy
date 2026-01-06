@@ -3,8 +3,13 @@
  * Handles the main CLI commands with validation
  */
 
+const fs = require('fs');
+const path = require('path');
+const http = require('http');
+const https = require('https');
+const { URL } = require('url');
 const { createProxyServer } = require('./server');
-const { clearCache, clearCacheByPattern, clearCacheByURL, clearCacheOlderThan, getCacheStats } = require('./cache');
+const { clearCache, clearCacheByPattern, clearCacheByURL, clearCacheOlderThan, getCacheStats, setCachedResponse, generateCacheKey } = require('./cache');
 const { getStats } = require('./analytics');
 const { displayConfigSummary } = require('./config');
 
@@ -468,12 +473,230 @@ function showCacheList() {
   console.log();
 }
 
+/**
+ * Warm the cache by pre-fetching URLs from a file
+ * @param {string} filePath - Path to file containing URLs (one per line)
+ * @param {string} originUrl - Origin server URL
+ */
+async function warmCacheCommand(filePath, originUrl) {
+  console.log('\n🔥 Cache Warming\n');
+  console.log('═'.repeat(60));
+  
+  // Check if file exists
+  if (!fs.existsSync(filePath)) {
+    console.error(`\n❌ Error: File not found: ${filePath}`);
+    console.log('   Make sure the file path is correct.\n');
+    process.exit(1);
+  }
+  
+  // Validate origin URL
+  let originUrlObj;
+  try {
+    originUrlObj = new URL(originUrl);
+  } catch (error) {
+    console.error(`\n❌ Error: Invalid origin URL: ${originUrl}`);
+    console.log('   Example: https://api.com\n');
+    process.exit(1);
+  }
+  
+  console.log(`\n📁 Reading URLs from: ${filePath}`);
+  console.log(`🌐 Origin server: ${originUrl}\n`);
+  
+  // Read and parse URLs from file
+  let urls = [];
+  try {
+    const fileContent = fs.readFileSync(filePath, 'utf8');
+    urls = fileContent
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0 && !line.startsWith('#')); // Filter empty lines and comments
+  } catch (error) {
+    console.error(`\n❌ Error reading file: ${error.message}\n`);
+    process.exit(1);
+  }
+  
+  if (urls.length === 0) {
+    console.log('⚠️  No URLs found in file.\n');
+    return;
+  }
+  
+  console.log(`📋 Found ${urls.length} URL${urls.length === 1 ? '' : 's'} to warm\n`);
+  
+  // Statistics
+  const stats = {
+    total: urls.length,
+    success: 0,
+    failed: 0,
+    cached: 0,
+    notCached: 0,
+    startTime: Date.now()
+  };
+  
+  // Fetch each URL sequentially
+  for (let i = 0; i < urls.length; i++) {
+    const urlPath = urls[i];
+    const fullUrl = urlPath.startsWith('http') ? urlPath : `${originUrl}${urlPath.startsWith('/') ? '' : '/'}${urlPath}`;
+    const progress = `[${i + 1}/${urls.length}]`;
+    
+    process.stdout.write(`${progress} Fetching: ${urlPath} ... `);
+    
+    try {
+      const result = await fetchAndCache(fullUrl, originUrl);
+      
+      if (result.success) {
+        stats.success++;
+        if (result.cached) {
+          stats.cached++;
+          console.log(`✅ ${result.status} (cached)`);
+        } else {
+          stats.notCached++;
+          console.log(`✅ ${result.status} (not cached: ${result.reason})`);
+        }
+      } else {
+        stats.failed++;
+        console.log(`❌ ${result.error}`);
+      }
+    } catch (error) {
+      stats.failed++;
+      console.log(`❌ ${error.message}`);
+    }
+  }
+  
+  // Calculate timing
+  const duration = Date.now() - stats.startTime;
+  const durationSec = (duration / 1000).toFixed(2);
+  
+  // Display summary
+  console.log('\n' + '═'.repeat(60));
+  console.log('\n📊 Cache Warming Summary\n');
+  console.log(`   Total URLs:        ${stats.total}`);
+  console.log(`   Successful:        ${stats.success} ✅`);
+  console.log(`   Failed:            ${stats.failed} ❌`);
+  console.log(`   Cached:            ${stats.cached} 💾`);
+  console.log(`   Not Cached:        ${stats.notCached}`);
+  console.log(`   Duration:          ${durationSec}s`);
+  
+  if (stats.success > 0) {
+    const avgTime = (duration / stats.success).toFixed(0);
+    console.log(`   Avg Time per URL:  ${avgTime}ms`);
+  }
+  
+  console.log('\n' + '═'.repeat(60));
+  
+  if (stats.success === stats.total) {
+    console.log('\n✅ Cache warming completed successfully!\n');
+  } else {
+    console.log(`\n⚠️  Cache warming completed with ${stats.failed} error(s)\n`);
+  }
+}
+
+/**
+ * Fetch a URL and cache the response
+ * @param {string} fullUrl - Full URL to fetch
+ * @param {string} originUrl - Origin base URL
+ * @returns {Promise<Object>} - Result object { success, status, cached, reason, error }
+ */
+function fetchAndCache(fullUrl, originUrl) {
+  return new Promise((resolve) => {
+    try {
+      const urlObj = new URL(fullUrl);
+      const protocol = urlObj.protocol === 'https:' ? https : http;
+      
+      const options = {
+        hostname: urlObj.hostname,
+        port: urlObj.port,
+        path: urlObj.pathname + urlObj.search,
+        method: 'GET',
+        headers: {
+          'User-Agent': 'CachingProxy/1.0 (Cache Warming)',
+        }
+      };
+      
+      const req = protocol.request(options, (res) => {
+        let body = '';
+        
+        res.on('data', (chunk) => {
+          body += chunk;
+        });
+        
+        res.on('end', () => {
+          const statusCode = res.statusCode;
+          
+          // Check if response should be cached (2xx status codes only)
+          if (statusCode >= 200 && statusCode < 300) {
+            // Prepare response data
+            const responseData = {
+              statusCode: statusCode,
+              headers: res.headers,
+              body: body
+            };
+            
+            // Check if it's cacheable
+            const cacheControl = res.headers['cache-control'] || '';
+            const hasCacheControl = cacheControl.includes('no-store') || 
+                                   cacheControl.includes('no-cache') || 
+                                   cacheControl.includes('private');
+            
+            if (hasCacheControl) {
+              resolve({
+                success: true,
+                status: statusCode,
+                cached: false,
+                reason: 'Cache-Control header'
+              });
+            } else {
+              // Cache the response
+              setCachedResponse('GET', fullUrl, responseData);
+              
+              resolve({
+                success: true,
+                status: statusCode,
+                cached: true
+              });
+            }
+          } else {
+            resolve({
+              success: true,
+              status: statusCode,
+              cached: false,
+              reason: `Status ${statusCode}`
+            });
+          }
+        });
+      });
+      
+      req.on('error', (error) => {
+        resolve({
+          success: false,
+          error: error.message
+        });
+      });
+      
+      req.setTimeout(10000, () => {
+        req.destroy();
+        resolve({
+          success: false,
+          error: 'Timeout'
+        });
+      });
+      
+      req.end();
+    } catch (error) {
+      resolve({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+}
+
 module.exports = {
   startServer,
   clearCache: clearCacheCommand,
   clearCachePattern: clearCachePatternCommand,
   clearCacheURL: clearCacheURLCommand,
   clearCacheOlderThan: clearCacheOlderThanCommand,
+  warmCache: warmCacheCommand,
   showCacheStats,
   showCacheList,
   validatePort,

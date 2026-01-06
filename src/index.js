@@ -6,7 +6,7 @@
  */
 
 const { program } = require('commander');
-const { startServer, clearCache, showCacheStats, showCacheList, clearCachePattern, clearCacheURL, clearCacheOlderThan } = require('./cli');
+const { startServer, clearCache, showCacheStats, showCacheList, clearCachePattern, clearCacheURL, clearCacheOlderThan, warmCache } = require('./cli');
 const { loadConfig } = require('./config');
 
 // Configure CLI
@@ -26,6 +26,7 @@ program
   .option('--clear-cache-url <url>', 'Clear cache entry for specific URL (e.g., "https://api.com/products/1")')
   .option('--clear-cache-older-than <time>', 'Clear cache entries older than specified time (e.g., "1h", "30m", "2d")')
   .option('--dry-run', 'Preview what would be deleted without actually deleting (use with clear-cache commands)')
+  .option('--warm-cache <file>', 'Pre-populate cache with URLs from file')
   .option('--cache-stats', 'Show cache statistics and analytics')
   .option('--cache-list', 'List all cached URLs with details');
 
@@ -43,6 +44,23 @@ if (options.clearCache) {
   clearCacheURL(options.clearCacheUrl, options.dryRun);
 } else if (options.clearCacheOlderThan) {
   clearCacheOlderThan(options.clearCacheOlderThan, options.dryRun);
+} else if (options.warmCache) {
+  // Warm cache requires origin URL
+  if (!options.origin && !options.config) {
+    console.error('\n❌ Error: --warm-cache requires --origin or --config\n');
+    console.log('Usage: caching-proxy --warm-cache <file> --origin <url>');
+    console.log('Example: caching-proxy --warm-cache urls.txt --origin https://api.com\n');
+    process.exit(1);
+  }
+  
+  // Load config if provided, otherwise use CLI origin
+  let originUrl = options.origin;
+  if (options.config) {
+    const config = loadConfig({ configPath: options.config, cliArgs: { origin: options.origin } });
+    originUrl = config.server.origin;
+  }
+  
+  warmCache(options.warmCache, originUrl);
 } else if (options.cacheStats) {
   showCacheStats();
 } else if (options.cacheList) {

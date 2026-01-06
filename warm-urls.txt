@@ -1,0 +1,19 @@
+# Cache warming URLs for testing
+# One URL per line (comments start with #)
+
+# Products
+/products/1
+/products/2
+/products/3
+/products/5
+
+# Users
+/users/1
+/users/2
+
+# Posts
+/posts/1
+
+# Carts
+/carts/1
+

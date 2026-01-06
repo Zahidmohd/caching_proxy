@@ -8,6 +8,7 @@ A high-performance CLI tool that creates a caching proxy server to speed up your
 - 💾 **Smart Caching** - Only cache successful (2xx) responses
 - 🔄 **Cache Indicators** - Clear `X-Cache: HIT/MISS` headers
 - 🧹 **Easy Management** - Simple `--clear-cache` command
+- 🔥 **Cache Warming** - Pre-populate cache with URLs from file
 - 📦 **File-Based Storage** - Persistent cache across restarts
 - 🗑️ **LRU Eviction** - Automatic cleanup when cache limits reached
 - 🌐 **Full HTTP Support** - Works with all HTTP methods
@@ -67,6 +68,71 @@ curl -X POST -H "Content-Type: application/json" \
 curl -X PUT -H "Content-Type: application/json" \
   -d '{"title":"Updated"}' \
   http://localhost:3000/products/1
+```
+
+### Example 5: Advanced Cache Management
+
+```bash
+# Preview what would be deleted (dry-run mode)
+caching-proxy --clear-cache --dry-run
+caching-proxy --clear-cache-pattern "/products/*" --dry-run
+
+# Clear cache by URL pattern
+caching-proxy --clear-cache-pattern "/products/*"    # Clear all products
+caching-proxy --clear-cache-pattern "/api/**"        # Clear all API routes
+
+# Clear specific URL
+caching-proxy --clear-cache-url "https://api.com/products/1"
+
+# Clear old cache entries
+caching-proxy --clear-cache-older-than 1h    # Older than 1 hour
+caching-proxy --clear-cache-older-than 30m   # Older than 30 minutes
+caching-proxy --clear-cache-older-than 2d    # Older than 2 days
+
+# View cache statistics
+caching-proxy --cache-stats
+caching-proxy --cache-list
+```
+
+### Example 6: Cache Warming
+
+```bash
+# Create a file with URLs to warm (one per line)
+cat > warm-urls.txt << EOF
+# Products
+/products/1
+/products/2
+/products/3
+
+# Users
+/users/1
+/users/2
+
+# Categories
+/categories
+EOF
+
+# Warm the cache by pre-fetching these URLs
+caching-proxy --warm-cache warm-urls.txt --origin https://dummyjson.com
+
+# Output:
+# 🔥 Cache Warming
+# ════════════════════════════════════════════════════════════
+# 
+# 📁 Reading URLs from: warm-urls.txt
+# 🌐 Origin server: https://dummyjson.com
+# 
+# 📋 Found 6 URLs to warm
+# 
+# [1/6] Fetching: /products/1 ... ✅ 200 (cached)
+# [2/6] Fetching: /products/2 ... ✅ 200 (cached)
+# ...
+# 
+# 📊 Cache Warming Summary
+#    Total URLs:        6
+#    Successful:        6 ✅
+#    Cached:            6 💾
+#    Duration:          1.5s
 ```
 
 ## 🔧 How It Works
@@ -282,6 +348,11 @@ caching-proxy --version
 | `--origin <url>` | Origin server URL | Yes* | `--origin https://api.com` |
 | `--config <path>` | Load configuration from file | No | `--config proxy.config.json` |
 | `--clear-cache` | Clear all cached entries | No | `--clear-cache` |
+| `--clear-cache-pattern <pattern>` | Clear cache matching URL pattern | No | `--clear-cache-pattern "/api/*"` |
+| `--clear-cache-url <url>` | Clear specific cached URL | No | `--clear-cache-url "https://api.com/products/1"` |
+| `--clear-cache-older-than <time>` | Clear entries older than time | No | `--clear-cache-older-than 1h` |
+| `--dry-run` | Preview deletions without deleting | No | `--clear-cache --dry-run` |
+| `--warm-cache <file>` | Pre-populate cache with URLs from file | No | `--warm-cache urls.txt --origin https://api.com` |
 | `--cache-stats` | Display cache statistics | No | `--cache-stats` |
 | `--cache-list` | List all cached URLs | No | `--cache-list` |
 | `--log-level <level>` | Set log level (debug/info/warn/error) | No | `--log-level debug` |
