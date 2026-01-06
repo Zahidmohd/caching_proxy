@@ -675,10 +675,16 @@ function createProxyServer(port, origin, config = null) {
     configureTransformations(config.transformations);
   }
   
-  // Preload cache on startup
-  console.log('🔄 Preloading cache from disk...');
-  const preloadStats = preloadCache();
-  displayPreloadStats(preloadStats);
+  // Preload cache on startup (unless disabled)
+  const shouldPreload = config?.cache?.preload !== false;
+  if (shouldPreload) {
+    console.log('🔄 Preloading cache from disk...');
+    const preloadStats = preloadCache();
+    displayPreloadStats(preloadStats);
+  } else {
+    console.log('⏭️  Cache preloading skipped (--no-preload flag)');
+    console.log('   Starting with empty cache');
+  }
   
   // Configure rate limiting if config provided
   const rateLimitCfg = config && (config.security?.rateLimit || config.rateLimit);

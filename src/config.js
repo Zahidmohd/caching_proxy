@@ -28,6 +28,7 @@ const DEFAULT_CONFIG = {
     maxSizeMB: 100,
     strategy: 'lru',
     storageDir: './cache',
+    preload: true, // Preload cache on startup
     version: null,
     versioning: {
       enabled: false,
@@ -316,6 +317,9 @@ function loadConfig(options = {}) {
   }
   if (cliArgs.redirectToHttps !== undefined) {
     config.server.https.redirectToHttps = cliArgs.redirectToHttps;
+  }
+  if (cliArgs.preload !== undefined) {
+    config.cache.preload = cliArgs.preload;
   }
   
   // Validate configuration

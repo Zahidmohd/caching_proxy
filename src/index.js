@@ -27,6 +27,7 @@ program
   .option('--key <path>', 'Path to SSL private key file (required with --https)')
   .option('--http-port <number>', 'HTTP port for dual HTTP/HTTPS mode (runs both servers simultaneously)')
   .option('--redirect-to-https', 'Auto-redirect HTTP to HTTPS in dual mode')
+  .option('--no-preload', 'Skip cache preloading on startup (start with empty cache)')
   .option('--clear-cache', 'Clear the cache')
   .option('--clear-cache-pattern <pattern>', 'Clear cache entries matching pattern (e.g., "/products/*")')
   .option('--clear-cache-url <url>', 'Clear cache entry for specific URL (e.g., "https://api.com/products/1")')
@@ -84,7 +85,8 @@ if (options.clearCache) {
       certPath: options.cert,
       keyPath: options.key,
       httpPort: options.httpPort,
-      redirectToHttps: options.redirectToHttps
+      redirectToHttps: options.redirectToHttps,
+      preload: options.preload
     }
   });
   
