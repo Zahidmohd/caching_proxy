@@ -553,6 +553,7 @@ ISC
 - [HTTP Proxy - Wikipedia](https://en.wikipedia.org/wiki/Proxy_server#Web_proxy_servers)
 - [Node.js HTTP Module](https://nodejs.org/api/http.html)
 - [RFC 7234 - HTTP Caching](https://tools.ietf.org/html/rfc7234)
+- [Project Idea](https://roadmap.sh/projects/caching-server)
 
 ---
 
