@@ -12,7 +12,12 @@ const path = require('path');
 const DEFAULT_CONFIG = {
   server: {
     port: 3000,
-    host: 'localhost'
+    host: 'localhost',
+    https: {
+      enabled: false,
+      certPath: null,
+      keyPath: null
+    }
   },
   cache: {
     enabled: true,
@@ -172,6 +177,21 @@ function validateConfig(config) {
     }
   }
   
+  // Validate: HTTPS configuration
+  if (config.server && config.server.https && config.server.https.enabled) {
+    if (!config.server.https.certPath) {
+      errors.push('server.https.certPath is required when HTTPS is enabled');
+    } else if (!fs.existsSync(path.resolve(config.server.https.certPath))) {
+      errors.push(`SSL certificate file not found: ${config.server.https.certPath}`);
+    }
+    
+    if (!config.server.https.keyPath) {
+      errors.push('server.https.keyPath is required when HTTPS is enabled');
+    } else if (!fs.existsSync(path.resolve(config.server.https.keyPath))) {
+      errors.push(`SSL private key file not found: ${config.server.https.keyPath}`);
+    }
+  }
+  
   // Validate: cache.defaultTTL
   if (config.cache && config.cache.defaultTTL !== undefined) {
     const ttl = parseInt(config.cache.defaultTTL, 10);
@@ -276,6 +296,15 @@ function loadConfig(options = {}) {
   if (cliArgs.versionTag) {
     config.cache.version = cliArgs.versionTag;
   }
+  if (cliArgs.https !== undefined) {
+    config.server.https.enabled = cliArgs.https;
+  }
+  if (cliArgs.certPath) {
+    config.server.https.certPath = cliArgs.certPath;
+  }
+  if (cliArgs.keyPath) {
+    config.server.https.keyPath = cliArgs.keyPath;
+  }
   
   // Validate configuration
   const validation = validateConfig(config);
@@ -297,7 +326,13 @@ function loadConfig(options = {}) {
  */
 function displayConfigSummary(config) {
   console.log('\n⚙️  Configuration Summary:');
-  console.log(`   Server:    ${config.server.host}:${config.server.port}`);
+  const protocol = config.server.https?.enabled ? 'https' : 'http';
+  console.log(`   Server:    ${protocol}://${config.server.host}:${config.server.port}`);
+  if (config.server.https?.enabled) {
+    console.log(`   🔒 HTTPS:   Enabled`);
+    console.log(`   Certificate: ${config.server.https.certPath}`);
+    console.log(`   Private Key: ${config.server.https.keyPath}`);
+  }
   console.log(`   Origin:    ${config.server.origin}`);
   console.log(`   Cache TTL: ${config.cache.defaultTTL}s`);
   if (config.cache.version) {

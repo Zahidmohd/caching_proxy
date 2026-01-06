@@ -5,6 +5,7 @@
 
 const http = require('http');
 const https = require('https');
+const fs = require('fs');
 const { URL } = require('url');
 const { getCachedResponse, getStaleEntryForValidation, refreshCacheTimestamp, setCachedResponse, getCacheStats, configureCacheLimits, configurePatternTTL, configureVersionTTL, configureCompression, configureCacheKeyHeaders } = require('./cache');
 const { getStats, recordRevalidation, recordBytesFromOrigin, recordBytesServed } = require('./analytics');
@@ -680,7 +681,8 @@ function createProxyServer(port, origin, config = null) {
     }
   }
   
-  const server = http.createServer(async (req, res) => {
+  // Request handler function (used by both HTTP and HTTPS)
+  const requestHandler = async (req, res) => {
     // Get client IP address
     const clientIP = getClientIP(req);
     
@@ -785,10 +787,28 @@ function createProxyServer(port, origin, config = null) {
       // Single origin mode (backward compatible)
       forwardRequest(req, res, origin);
     }
-  });
+  };
+
+  // Create HTTP or HTTPS server based on configuration
+  let server;
+  const httpsEnabled = config && config.server.https && config.server.https.enabled;
+  
+  if (httpsEnabled) {
+    // Load SSL certificate and key
+    const httpsOptions = {
+      cert: fs.readFileSync(config.server.https.certPath),
+      key: fs.readFileSync(config.server.https.keyPath)
+    };
+    
+    server = https.createServer(httpsOptions, requestHandler);
+    console.log(`🔒 HTTPS server enabled`);
+  } else {
+    server = http.createServer(requestHandler);
+  }
 
   server.listen(port, () => {
-    console.log(`✅ Proxy server is running on http://localhost:${port}`);
+    const protocol = httpsEnabled ? 'https' : 'http';
+    console.log(`✅ Proxy server is running on ${protocol}://localhost:${port}`);
     
     if (isMultiOriginEnabled()) {
       console.log(`📡 Multi-origin routing enabled`);
@@ -796,7 +816,7 @@ function createProxyServer(port, origin, config = null) {
       console.log(`📡 Forwarding requests to: ${origin}`);
     }
     
-    console.log(`\n🎯 Try: curl http://localhost:${port}/test\n`);
+    console.log(`\n🎯 Try: curl ${protocol}://localhost:${port}/test\n`);
   });
 
   // Handle server errors

@@ -22,6 +22,9 @@ program
   .option('-c, --config <path>', 'Path to configuration file')
   .option('--version-tag <string>', 'Cache version tag for versioning support (e.g., "v1", "v2.0", "2024-01")')
   .option('--log-level <level>', 'Set log level: debug, info, warn, error (default: info)')
+  .option('--https', 'Enable HTTPS server')
+  .option('--cert <path>', 'Path to SSL certificate file (required with --https)')
+  .option('--key <path>', 'Path to SSL private key file (required with --https)')
   .option('--clear-cache', 'Clear the cache')
   .option('--clear-cache-pattern <pattern>', 'Clear cache entries matching pattern (e.g., "/products/*")')
   .option('--clear-cache-url <url>', 'Clear cache entry for specific URL (e.g., "https://api.com/products/1")')
@@ -74,7 +77,10 @@ if (options.clearCache) {
       port: options.port,
       origin: options.origin,
       logLevel: options.logLevel,
-      versionTag: options.versionTag
+      versionTag: options.versionTag,
+      https: options.https,
+      certPath: options.cert,
+      keyPath: options.key
     }
   });
   
