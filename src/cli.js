@@ -441,6 +441,74 @@ function showCacheStats() {
     }
   }
   
+  // Per-Origin Statistics (for multi-origin routing)
+  if (stats.originStats && stats.originStats.length > 0) {
+    console.log(`\n🗺️  Per-Origin Statistics:`);
+    console.log('   ' + '─'.repeat(56));
+    stats.originStats.forEach((originStat, index) => {
+      const shortOrigin = originStat.origin.length > 40 ? originStat.origin.substring(0, 37) + '...' : originStat.origin;
+      console.log(`   ${(index + 1).toString().padStart(2)}. ${shortOrigin}`);
+      console.log(`       Hits: ${originStat.hits} | Misses: ${originStat.misses} | Revalidations: ${originStat.revalidations}`);
+      console.log(`       Total Requests: ${originStat.total} | Hit Rate: ${originStat.hitRate}%`);
+      console.log(`       Downloaded: ${originStat.bytesFromOriginStr} | Served: ${originStat.bytesServedStr}`);
+    });
+  }
+  
+  // Origin Health Status
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const healthMetricsFile = path.join(__dirname, '..', 'cache', 'health-metrics.json');
+    
+    if (fs.existsSync(healthMetricsFile)) {
+      const healthData = fs.readFileSync(healthMetricsFile, 'utf8');
+      const healthStatuses = JSON.parse(healthData);
+      const origins = Object.keys(healthStatuses);
+      
+      if (origins.length > 0) {
+        console.log(`\n🏥 Origin Health Status:`);
+        console.log('   ' + '─'.repeat(56));
+        
+        origins.forEach((origin) => {
+          const health = healthStatuses[origin];
+          const shortOrigin = origin.length > 40 ? origin.substring(0, 37) + '...' : origin;
+          const statusIcon = health.status === 'healthy' ? '✅' : health.status === 'unhealthy' ? '❌' : '❓';
+          const statusText = health.status.toUpperCase();
+          
+          console.log(`   ${statusIcon} ${shortOrigin}`);
+          console.log(`      Status: ${statusText}`);
+          
+          if (health.lastCheck) {
+            const lastCheckDate = new Date(health.lastCheck);
+            const timeSinceCheck = Math.floor((Date.now() - health.lastCheck) / 1000);
+            console.log(`      Last Check: ${timeSinceCheck}s ago (${lastCheckDate.toLocaleTimeString()})`);
+          }
+          
+          if (health.responseTime !== undefined) {
+            console.log(`      Response Time: ${health.responseTime}ms`);
+          }
+          
+          if (health.totalChecks > 0) {
+            console.log(`      Checks: ${health.totalChecks} (${health.totalFailures} failures)`);
+            console.log(`      Uptime: ${health.uptimePercentage}%`);
+          }
+          
+          if (health.consecutiveFailures > 0) {
+            console.log(`      ⚠️  Consecutive Failures: ${health.consecutiveFailures}`);
+          }
+          
+          if (health.lastError) {
+            console.log(`      Last Error: ${health.lastError}`);
+          }
+          
+          console.log('');
+        });
+      }
+    }
+  } catch (error) {
+    // Health metrics file not available or error loading
+  }
+  
   // Rate Limit Metrics
   try {
     const { getRateLimitMetrics } = require('./rateLimit');

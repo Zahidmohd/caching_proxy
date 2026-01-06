@@ -40,6 +40,7 @@ function loadAnalytics() {
     totalMisses: 0,
     totalRevalidations: 0,     // Number of 304 Not Modified responses
     urlStats: {}, // { url: { hits: 0, misses: 0, revalidations: 0, lastAccess: timestamp } }
+    originStats: {}, // { origin: { hits: 0, misses: 0, revalidations: 0, bytesServed: 0, bytesFromOrigin: 0 } }
     performance: {
       hitResponseTimes: [],    // Array of response times for cache hits (in ms)
       missResponseTimes: [],   // Array of response times for cache misses (in ms)
@@ -86,8 +87,9 @@ function saveAnalytics(analytics) {
  * @param {string} url - The URL that was hit
  * @param {number} responseTime - Response time in milliseconds
  * @param {number} dataSize - Size of response data in bytes
+ * @param {string} origin - Origin URL (optional)
  */
-function recordHit(url, responseTime = 0, dataSize = 0) {
+function recordHit(url, responseTime = 0, dataSize = 0, origin = null) {
   const analytics = loadAnalytics();
   analytics.totalHits++;
   
@@ -97,6 +99,18 @@ function recordHit(url, responseTime = 0, dataSize = 0) {
   
   analytics.urlStats[url].hits++;
   analytics.urlStats[url].lastAccess = Date.now();
+  
+  // Track per-origin statistics
+  if (origin) {
+    if (!analytics.originStats) {
+      analytics.originStats = {};
+    }
+    if (!analytics.originStats[origin]) {
+      analytics.originStats[origin] = { hits: 0, misses: 0, revalidations: 0, bytesServed: 0, bytesFromOrigin: 0 };
+    }
+    analytics.originStats[origin].hits++;
+    analytics.originStats[origin].bytesServed += dataSize;
+  }
   
   // Initialize performance object if it doesn't exist
   if (!analytics.performance) {
@@ -126,8 +140,9 @@ function recordHit(url, responseTime = 0, dataSize = 0) {
  * Record a cache miss
  * @param {string} url - The URL that was missed
  * @param {number} responseTime - Response time in milliseconds
+ * @param {string} origin - Origin URL (optional)
  */
-function recordMiss(url, responseTime = 0) {
+function recordMiss(url, responseTime = 0, origin = null) {
   const analytics = loadAnalytics();
   analytics.totalMisses++;
   
@@ -137,6 +152,17 @@ function recordMiss(url, responseTime = 0) {
   
   analytics.urlStats[url].misses++;
   analytics.urlStats[url].lastAccess = Date.now();
+  
+  // Track per-origin statistics
+  if (origin) {
+    if (!analytics.originStats) {
+      analytics.originStats = {};
+    }
+    if (!analytics.originStats[origin]) {
+      analytics.originStats[origin] = { hits: 0, misses: 0, revalidations: 0, bytesServed: 0, bytesFromOrigin: 0 };
+    }
+    analytics.originStats[origin].misses++;
+  }
   
   // Initialize performance object if it doesn't exist
   if (!analytics.performance) {
@@ -212,7 +238,7 @@ function recordRevalidation(url, responseTime = 0, bytesSaved = 0) {
  * Record bytes downloaded from origin (for bandwidth tracking)
  * @param {number} bytes - Bytes downloaded from origin
  */
-function recordBytesFromOrigin(bytes) {
+function recordBytesFromOrigin(bytes, origin = null) {
   if (bytes <= 0) return;
   
   const analytics = loadAnalytics();
@@ -229,6 +255,18 @@ function recordBytesFromOrigin(bytes) {
   }
   
   analytics.bandwidth.totalBytesFromOrigin += bytes;
+  
+  // Track per-origin statistics
+  if (origin) {
+    if (!analytics.originStats) {
+      analytics.originStats = {};
+    }
+    if (!analytics.originStats[origin]) {
+      analytics.originStats[origin] = { hits: 0, misses: 0, revalidations: 0, bytesServed: 0, bytesFromOrigin: 0 };
+    }
+    analytics.originStats[origin].bytesFromOrigin += bytes;
+  }
+  
   saveAnalytics(analytics);
 }
 
@@ -236,7 +274,7 @@ function recordBytesFromOrigin(bytes) {
  * Record bytes served to client
  * @param {number} bytes - Bytes served to client
  */
-function recordBytesServed(bytes) {
+function recordBytesServed(bytes, origin = null) {
   if (bytes <= 0) return;
   
   const analytics = loadAnalytics();
@@ -253,6 +291,9 @@ function recordBytesServed(bytes) {
   }
   
   analytics.bandwidth.totalBytesServed += bytes;
+  
+  // Per-origin tracking is handled in recordHit/recordMiss/recordRevalidation
+  // This function only tracks the total
   
   // Update total bandwidth saved (includes cache hits)
   analytics.bandwidth.totalBytesSaved = analytics.performance.bandwidthSaved + (analytics.bandwidth.bytesSavedBy304 || 0);
@@ -384,6 +425,23 @@ function getStats() {
     ? ((1 - totalDownloaded / totalServed) * 100).toFixed(2)
     : 0;
   
+  // Process per-origin statistics
+  const originStats = analytics.originStats || {};
+  const originStatsArray = Object.entries(originStats).map(([origin, stats]) => ({
+    origin,
+    hits: stats.hits || 0,
+    misses: stats.misses || 0,
+    revalidations: stats.revalidations || 0,
+    total: (stats.hits || 0) + (stats.misses || 0) + (stats.revalidations || 0),
+    hitRate: ((stats.hits || 0) + (stats.misses || 0)) > 0
+      ? (((stats.hits || 0) / ((stats.hits || 0) + (stats.misses || 0))) * 100).toFixed(2)
+      : 0,
+    bytesServed: stats.bytesServed || 0,
+    bytesServedStr: formatBytes(stats.bytesServed || 0),
+    bytesFromOrigin: stats.bytesFromOrigin || 0,
+    bytesFromOriginStr: formatBytes(stats.bytesFromOrigin || 0)
+  })).sort((a, b) => b.total - a.total);
+  
   return {
     totalHits: analytics.totalHits,
     totalMisses: analytics.totalMisses,
@@ -394,6 +452,7 @@ function getStats() {
     uptime: uptimeStr,
     uptimeMs,
     topUrls,
+    originStats: originStatsArray,
     performance: {
       avgHitTime: parseFloat(avgHitTime),
       avgMissTime: parseFloat(avgMissTime),

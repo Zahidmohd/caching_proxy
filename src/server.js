@@ -9,7 +9,8 @@ const { URL } = require('url');
 const { getCachedResponse, getStaleEntryForValidation, refreshCacheTimestamp, setCachedResponse, getCacheStats, configureCacheLimits, configurePatternTTL, configureCompression, configureCacheKeyHeaders } = require('./cache');
 const { getStats, recordRevalidation, recordBytesFromOrigin, recordBytesServed } = require('./analytics');
 const { configureRateLimit, getClientIP, checkRateLimit, recordRequest, startCleanup } = require('./rateLimit');
-const { configureRouter, matchOrigin, isMultiOriginEnabled } = require('./router');
+const { configureRouter, matchOrigin, isMultiOriginEnabled, getRoutingTable } = require('./router');
+const { configureHealthCheck, startHealthChecks, getAllHealthStatuses, isHealthCheckEnabled } = require('./healthCheck');
 const logger = require('./logger');
 
 // Track server start time for uptime
@@ -299,7 +300,7 @@ function forwardRequest(req, res, origin) {
   const startTime = Date.now();
   
   // ✅ Check cache first
-  const cached = getCachedResponse(req.method, fullUrl, startTime, requestId, req.headers);
+  const cached = getCachedResponse(req.method, fullUrl, startTime, requestId, req.headers, origin);
   
   if (cached) {
     // Cache HIT - serve from cache
@@ -326,7 +327,7 @@ function forwardRequest(req, res, origin) {
     // Track bandwidth served
     const bodySize = cached.body ? Buffer.byteLength(cached.body, 'utf8') : 0;
     if (bodySize > 0) {
-      recordBytesServed(bodySize);
+      recordBytesServed(bodySize, origin);
     }
     
     // Send cached response to client
@@ -339,7 +340,7 @@ function forwardRequest(req, res, origin) {
   console.log(`📤 ${req.method} ${targetUrl.pathname}${targetUrl.search}`);
   
   // Check for stale cache entry with validation headers (ETag/Last-Modified)
-  const staleEntry = getStaleEntryForValidation(req.method, fullUrl, req.headers);
+  const staleEntry = getStaleEntryForValidation(req.method, fullUrl, req.headers, origin);
   
   // Choose http or https based on origin protocol
   const client = originUrl.protocol === 'https:' ? https : http;
@@ -383,10 +384,10 @@ function forwardRequest(req, res, origin) {
       const cacheControl = proxyRes.headers['cache-control'];
       
       // Refresh cache timestamp to extend TTL
-      refreshCacheTimestamp(req.method, fullUrl, req.headers, null, cacheControl);
+      refreshCacheTimestamp(req.method, fullUrl, req.headers, origin, null, cacheControl);
       
       // Get the cached content (now with refreshed timestamp)
-      const freshContent = getCachedResponse(req.method, fullUrl, startTime, requestId, req.headers);
+      const freshContent = getCachedResponse(req.method, fullUrl, startTime, requestId, req.headers, origin);
       
       if (freshContent) {
         // Calculate response time
@@ -416,8 +417,8 @@ function forwardRequest(req, res, origin) {
         });
         
         // Record revalidation and bandwidth savings in analytics
-        recordRevalidation(fullUrl, responseTime, savedBytes);
-        recordBytesServed(savedBytes);
+        recordRevalidation(fullUrl, responseTime, savedBytes, origin);
+        recordBytesServed(savedBytes, origin);
         
         console.log(`📊 Bandwidth saved: ${savedBytes} bytes (${(savedBytes / 1024).toFixed(2)} KB)`);
       } else {
@@ -478,8 +479,8 @@ function forwardRequest(req, res, origin) {
       // Track bandwidth usage
       const bodySize = responseBody ? Buffer.byteLength(responseBody, 'utf8') : 0;
       if (bodySize > 0) {
-        recordBytesFromOrigin(bodySize);
-        recordBytesServed(bodySize);
+        recordBytesFromOrigin(bodySize, origin);
+        recordBytesServed(bodySize, origin);
       }
       
       // Store in cache (only if successful 2xx response and not authenticated)
@@ -487,7 +488,7 @@ function forwardRequest(req, res, origin) {
         statusCode: proxyRes.statusCode,
         headers: proxyRes.headers, // Store original headers (without X-Cache)
         body: responseBody
-      }, hasAuth, cacheControl, requestId, req.headers);
+      }, hasAuth, cacheControl, requestId, req.headers, origin);
     });
   });
   
@@ -585,6 +586,39 @@ function createProxyServer(port, origin, config = null) {
   } else if (origin) {
     // Single origin mode - configure router with default origin
     configureRouter({ default: origin });
+  }
+  
+  // Configure health checks if config provided
+  if (config && config.healthCheck) {
+    // Extract origins from routing configuration
+    const origins = [];
+    if (config.origins) {
+      Object.entries(config.origins).forEach(([pattern, originUrl]) => {
+        if (pattern !== 'default' && !origins.includes(originUrl)) {
+          origins.push(originUrl);
+        }
+      });
+      // Add default origin if present
+      if (config.origins.default && !origins.includes(config.origins.default)) {
+        origins.push(config.origins.default);
+      }
+    } else if (origin) {
+      origins.push(origin);
+    }
+    
+    configureHealthCheck({
+      enabled: config.healthCheck.enabled !== false,
+      interval: config.healthCheck.interval || 30000,
+      timeout: config.healthCheck.timeout || 5000,
+      path: config.healthCheck.path || '/',
+      method: config.healthCheck.method || 'HEAD',
+      origins: origins
+    });
+    
+    // Start health checks if enabled
+    if (config.healthCheck.enabled) {
+      startHealthChecks();
+    }
   }
   
   const server = http.createServer(async (req, res) => {

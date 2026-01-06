@@ -388,27 +388,38 @@ function shouldCacheResponse(statusCode) {
 
 /**
  * Generate a unique cache key based on request details
- * Format: METHOD:URL (including query parameters)
+ * Format: ORIGIN_HASH:METHOD:URL (including query parameters)
  * Optionally includes header values for header-based cache differentiation
  * 
  * Examples:
- *   - Without headers: GET:https://dummyjson.com/products/1
- *   - With headers: GET:https://dummyjson.com/products/1:a1b2c3d4
+ *   - Without headers: a1b2c3d4:GET:https://dummyjson.com/products/1
+ *   - With headers: a1b2c3d4:GET:https://dummyjson.com/products/1:x9y8z7w6
  * 
  * @param {string} method - HTTP method (GET, POST, etc.)
  * @param {string} url - Complete URL including query parameters
  * @param {Object} headers - Request headers (optional)
+ * @param {string} origin - Origin URL (for multi-origin separation)
  * @returns {string} - Unique cache key
  * 
  * If CACHE_KEY_HEADERS is configured, includes a hash of specified header values.
  * This allows different cache entries for different header combinations.
+ * 
+ * The origin is hashed and prepended to the key to ensure cache separation
+ * between different backend origins in multi-origin routing scenarios.
  */
-function generateCacheKey(method, url, headers = {}) {
+function generateCacheKey(method, url, headers = {}, origin = null) {
   // Normalize method to uppercase for consistency
   const normalizedMethod = method.toUpperCase();
   
-  // Base cache key format: METHOD:URL
-  let cacheKey = `${normalizedMethod}:${url}`;
+  // Create origin hash prefix if origin is provided
+  let originPrefix = '';
+  if (origin) {
+    const originHash = crypto.createHash('md5').update(origin).digest('hex').substring(0, 8);
+    originPrefix = `${originHash}:`;
+  }
+  
+  // Base cache key format: ORIGIN_HASH:METHOD:URL
+  let cacheKey = `${originPrefix}${normalizedMethod}:${url}`;
   
   // If header-based keys are enabled, append header hash
   if (CACHE_KEY_HEADERS.length > 0 && headers) {
@@ -440,6 +451,7 @@ function generateCacheKey(method, url, headers = {}) {
  * @param {Date.now()} startTime - Start time for response time calculation
  * @param {string} requestId - Request ID for logging
  * @param {Object} headers - Request headers (for header-based cache keys)
+ * @param {string} origin - Origin URL (for multi-origin separation)
  * @returns {Object|null} - Cached response object or null if not found
  * 
  * Returns null if cache miss, otherwise returns:
@@ -449,10 +461,10 @@ function generateCacheKey(method, url, headers = {}) {
  *   body: string
  * }
  */
-function getCachedResponse(method, url, startTime = Date.now(), requestId = null, headers = {}) {
+function getCachedResponse(method, url, startTime = Date.now(), requestId = null, headers = {}, origin = null) {
   // First try with configured headers only
   // (Vary headers are merged during caching, so the key will include them)
-  const key = generateCacheKey(method, url, headers);
+  const key = generateCacheKey(method, url, headers, origin);
   const cache = loadCache();
   const cached = cache.get(key);
   
@@ -464,7 +476,7 @@ function getCachedResponse(method, url, startTime = Date.now(), requestId = null
       cache.delete(key);
       saveCache(cache);
       const responseTime = Date.now() - startTime;
-      recordMiss(key, responseTime); // Record as miss since expired
+      recordMiss(key, responseTime, origin); // Record as miss since expired
       return null;
     }
     
@@ -511,7 +523,7 @@ function getCachedResponse(method, url, startTime = Date.now(), requestId = null
     
     // Calculate data size from decompressed body
     const dataSize = decompressedBody ? Buffer.byteLength(decompressedBody, 'utf8') : 0;
-    recordHit(key, responseTime, dataSize); // Record cache hit with timing and size
+    recordHit(key, responseTime, dataSize, origin); // Record cache hit with timing and size
     
     // Log cache event with request ID
     const logger = require('./logger');
@@ -531,7 +543,7 @@ function getCachedResponse(method, url, startTime = Date.now(), requestId = null
   } else {
     const responseTime = Date.now() - startTime;
     console.log(`❌ Cache MISS: ${key}`);
-    recordMiss(key, responseTime); // Record cache miss with timing
+    recordMiss(key, responseTime, origin); // Record cache miss with timing
     
     // Log cache event with request ID
     const logger = require('./logger');
@@ -550,6 +562,7 @@ function getCachedResponse(method, url, startTime = Date.now(), requestId = null
  * @param {string} method - HTTP method
  * @param {string} url - Complete URL
  * @param {Object} headers - Request headers (for header-based cache keys)
+ * @param {string} origin - Origin URL (for multi-origin separation)
  * @returns {Object|null} - Stale cache entry with validation headers, or null
  * 
  * Returns an object with:
@@ -563,8 +576,8 @@ function getCachedResponse(method, url, startTime = Date.now(), requestId = null
  * This is used when cache is expired/missing to send conditional requests to origin.
  * If origin returns 304, we can serve the stale content and update timestamp.
  */
-function getStaleEntryForValidation(method, url, headers = {}) {
-  const key = generateCacheKey(method, url, headers);
+function getStaleEntryForValidation(method, url, headers = {}, origin = null) {
+  const key = generateCacheKey(method, url, headers, origin);
   const cache = loadCache();
   const cached = cache.get(key);
   
@@ -591,6 +604,7 @@ function getStaleEntryForValidation(method, url, headers = {}) {
  * @param {string} method - HTTP method
  * @param {string} url - Complete URL
  * @param {Object} headers - Request headers (for header-based cache keys)
+ * @param {string} origin - Origin URL (for multi-origin separation)
  * @param {number} ttl - New TTL in milliseconds (optional, uses determineTTL if not provided)
  * @param {string} cacheControl - Cache-Control header from 304 response
  * @returns {boolean} - True if cache was updated, false if entry not found
@@ -599,8 +613,8 @@ function getStaleEntryForValidation(method, url, headers = {}) {
  * Updates the cache entry's expiresAt timestamp to extend its life
  * without re-downloading the content.
  */
-function refreshCacheTimestamp(method, url, headers = {}, ttl = null, cacheControl = null) {
-  const key = generateCacheKey(method, url, headers);
+function refreshCacheTimestamp(method, url, headers = {}, origin = null, ttl = null, cacheControl = null) {
+  const key = generateCacheKey(method, url, headers, origin);
   const cache = loadCache();
   const cached = cache.get(key);
   
@@ -767,7 +781,7 @@ function isCacheable(cacheControl) {
  *   ❌ NOT CACHED: 4xx client errors (404, 400, 401, etc.)
  *   ❌ NOT CACHED: 5xx server errors (500, 502, 503, etc.)
  */
-function setCachedResponse(method, url, responseData, hasAuth = false, cacheControl = null, requestId = null, requestHeaders = {}) {
+function setCachedResponse(method, url, responseData, hasAuth = false, cacheControl = null, requestId = null, requestHeaders = {}, origin = null) {
   // Only cache GET requests (standard HTTP caching practice)
   if (method.toUpperCase() !== 'GET') {
     console.log(`⏭️  NOT cached (method ${method}): ${method}:${url}`);
@@ -826,7 +840,7 @@ function setCachedResponse(method, url, responseData, hasAuth = false, cacheCont
     }
   });
   
-  const key = generateCacheKey(method, url, headersToUse);
+  const key = generateCacheKey(method, url, headersToUse, origin);
   const cache = loadCache();
   
   // Determine TTL based on priority: Cache-Control > Custom Config > Default
@@ -1025,30 +1039,66 @@ function clearCacheByPattern(pattern, dryRun = false) {
  * @param {string} url - Exact URL to clear (e.g., "https://api.com/products/123")
  * @param {string} method - HTTP method (default: "GET")
  * @param {boolean} dryRun - If true, only return what would be deleted without deleting
- * @returns {Object} - { cleared: boolean, key: string|null }
+ * @param {string} origin - Origin URL (optional, clears all origins if not specified)
+ * @returns {Object} - { cleared: boolean|number, key: string|null, keys: Array<string> }
  */
-function clearCacheByURL(url, method = 'GET', dryRun = false) {
+function clearCacheByURL(url, method = 'GET', dryRun = false, origin = null) {
   const cache = loadCache();
-  const key = generateCacheKey(method, url);
   
-  // Check if the key exists
-  if (cache.has(key)) {
-    // If dry-run, just return what would be deleted
-    if (!dryRun) {
-      cache.delete(key);
-      saveCache(cache);
+  if (origin) {
+    // Clear specific origin
+    const key = generateCacheKey(method, url, {}, origin);
+    
+    // Check if the key exists
+    if (cache.has(key)) {
+      // If dry-run, just return what would be deleted
+      if (!dryRun) {
+        cache.delete(key);
+        saveCache(cache);
+      }
+      
+      return {
+        cleared: true,
+        key: key,
+        keys: [key]
+      };
     }
     
     return {
-      cleared: true,
-      key: key
+      cleared: false,
+      key: null,
+      keys: []
+    };
+  } else {
+    // Clear all origins for this URL
+    const keysToRemove = [];
+    const urlSuffix = `:${method.toUpperCase()}:${url}`;
+    
+    for (const key of cache.keys()) {
+      if (key.includes(urlSuffix)) {
+        keysToRemove.push(key);
+      }
+    }
+    
+    if (keysToRemove.length > 0) {
+      if (!dryRun) {
+        keysToRemove.forEach(key => cache.delete(key));
+        saveCache(cache);
+      }
+      
+      return {
+        cleared: keysToRemove.length,
+        key: null,
+        keys: keysToRemove
+      };
+    }
+    
+    return {
+      cleared: false,
+      key: null,
+      keys: []
     };
   }
-  
-  return {
-    cleared: false,
-    key: null
-  };
 }
 
 /**
