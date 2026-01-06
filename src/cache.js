@@ -393,6 +393,185 @@ function saveCache(cache) {
 }
 
 /**
+ * Preload cache on startup
+ * Validates entries and removes expired ones
+ * @returns {Object} Statistics about preloaded cache
+ */
+function preloadCache() {
+  const startTime = Date.now();
+  const stats = {
+    totalEntries: 0,
+    validEntries: 0,
+    expiredEntries: 0,
+    corruptEntries: 0,
+    loadTime: 0,
+    cacheSize: 0,
+    oldestEntry: null,
+    newestEntry: null,
+    fileExists: false,
+    success: false
+  };
+  
+  try {
+    // Check if cache file exists
+    if (!fs.existsSync(CACHE_FILE)) {
+      console.log('📂 No existing cache file found - starting with empty cache');
+      stats.success = true;
+      stats.loadTime = Date.now() - startTime;
+      return stats;
+    }
+    
+    stats.fileExists = true;
+    
+    // Load and parse cache file
+    const fileSize = fs.statSync(CACHE_FILE).size;
+    stats.cacheSize = fileSize;
+    
+    const data = fs.readFileSync(CACHE_FILE, 'utf8');
+    const obj = JSON.parse(data);
+    const cache = new Map(Object.entries(obj));
+    
+    stats.totalEntries = cache.size;
+    const now = Date.now();
+    let oldestTime = now;
+    let newestTime = 0;
+    
+    // Validate and clean entries
+    for (const [key, value] of cache.entries()) {
+      try {
+        // Validate entry structure
+        if (!value || typeof value !== 'object') {
+          console.log(`⚠️  Corrupt entry removed: ${key}`);
+          cache.delete(key);
+          stats.corruptEntries++;
+          continue;
+        }
+        
+        // Check if entry has expired
+        if (value.expiresAt && now > value.expiresAt) {
+          cache.delete(key);
+          stats.expiredEntries++;
+        } else {
+          stats.validEntries++;
+          
+          // Track oldest and newest entries
+          if (value.cachedAt) {
+            if (value.cachedAt < oldestTime) {
+              oldestTime = value.cachedAt;
+              stats.oldestEntry = {
+                key: key.substring(0, 60) + (key.length > 60 ? '...' : ''),
+                age: Math.floor((now - value.cachedAt) / 1000)
+              };
+            }
+            if (value.cachedAt > newestTime) {
+              newestTime = value.cachedAt;
+              stats.newestEntry = {
+                key: key.substring(0, 60) + (key.length > 60 ? '...' : ''),
+                age: Math.floor((now - value.cachedAt) / 1000)
+              };
+            }
+          }
+        }
+      } catch (error) {
+        console.log(`⚠️  Error validating entry ${key}: ${error.message}`);
+        cache.delete(key);
+        stats.corruptEntries++;
+      }
+    }
+    
+    // Save cleaned cache if we removed any entries
+    if (stats.expiredEntries > 0 || stats.corruptEntries > 0) {
+      saveCache(cache);
+    }
+    
+    stats.success = true;
+    stats.loadTime = Date.now() - startTime;
+    
+    return stats;
+    
+  } catch (error) {
+    console.error('❌ Error preloading cache:', error.message);
+    
+    // If cache is corrupt, create a backup and start fresh
+    if (stats.fileExists) {
+      try {
+        const backupFile = CACHE_FILE + '.backup.' + Date.now();
+        fs.copyFileSync(CACHE_FILE, backupFile);
+        console.log(`💾 Corrupt cache backed up to: ${backupFile}`);
+        fs.unlinkSync(CACHE_FILE);
+        console.log('🗑️  Corrupt cache file removed - starting with empty cache');
+      } catch (backupError) {
+        console.error('⚠️  Could not backup corrupt cache:', backupError.message);
+      }
+    }
+    
+    stats.loadTime = Date.now() - startTime;
+    return stats;
+  }
+}
+
+/**
+ * Display cache preload statistics
+ * @param {Object} stats - Statistics from preloadCache()
+ */
+function displayPreloadStats(stats) {
+  console.log('');
+  console.log('═══════════════════════════════════════════════════════════════');
+  console.log('📦 Cache Preload Statistics');
+  console.log('═══════════════════════════════════════════════════════════════');
+  
+  if (!stats.fileExists) {
+    console.log('   Status:         No existing cache');
+    console.log('   Starting with:  Empty cache');
+  } else {
+    console.log(`   File Size:      ${(stats.cacheSize / 1024).toFixed(2)} KB`);
+    console.log(`   Total Entries:  ${stats.totalEntries}`);
+    console.log(`   Valid Entries:  ${stats.validEntries} ✅`);
+    
+    if (stats.expiredEntries > 0) {
+      console.log(`   Expired:        ${stats.expiredEntries} ⏰ (removed)`);
+    }
+    
+    if (stats.corruptEntries > 0) {
+      console.log(`   Corrupt:        ${stats.corruptEntries} ⚠️  (removed)`);
+    }
+    
+    if (stats.oldestEntry) {
+      console.log(`   Oldest Entry:   ${formatAge(stats.oldestEntry.age)} ago`);
+      console.log(`                   ${stats.oldestEntry.key}`);
+    }
+    
+    if (stats.newestEntry && stats.validEntries > 1) {
+      console.log(`   Newest Entry:   ${formatAge(stats.newestEntry.age)} ago`);
+      console.log(`                   ${stats.newestEntry.key}`);
+    }
+    
+    console.log(`   Load Time:      ${stats.loadTime}ms`);
+    
+    if (stats.validEntries > 0) {
+      console.log(`   Status:         ✅ ${stats.validEntries} entries ready`);
+    } else {
+      console.log('   Status:         Cache empty after cleanup');
+    }
+  }
+  
+  console.log('═══════════════════════════════════════════════════════════════');
+  console.log('');
+}
+
+/**
+ * Format age in seconds to human-readable string
+ * @param {number} seconds - Age in seconds
+ * @returns {string} Formatted age
+ */
+function formatAge(seconds) {
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
+  return `${Math.floor(seconds / 86400)}d`;
+}
+
+/**
  * Check if a status code indicates a successful response that should be cached
  * @param {number} statusCode - HTTP status code
  * @returns {boolean} - True if status code is in the 2xx range (successful)
@@ -1275,6 +1454,8 @@ module.exports = {
   extractTTLFromCacheControl,
   determineTTL,
   parseTimeString,
-  calculateCacheSize
+  calculateCacheSize,
+  preloadCache,
+  displayPreloadStats
 };
 

@@ -7,7 +7,7 @@ const http = require('http');
 const https = require('https');
 const fs = require('fs');
 const { URL } = require('url');
-const { getCachedResponse, getStaleEntryForValidation, refreshCacheTimestamp, setCachedResponse, getCacheStats, configureCacheLimits, configurePatternTTL, configureVersionTTL, configureCompression, configureCacheKeyHeaders } = require('./cache');
+const { getCachedResponse, getStaleEntryForValidation, refreshCacheTimestamp, setCachedResponse, getCacheStats, configureCacheLimits, configurePatternTTL, configureVersionTTL, configureCompression, configureCacheKeyHeaders, preloadCache, displayPreloadStats } = require('./cache');
 const { getStats, recordRevalidation, recordBytesFromOrigin, recordBytesServed } = require('./analytics');
 const { configureRateLimit, getClientIP, checkRateLimit, recordRequest, startCleanup } = require('./rateLimit');
 const { configureRouter, matchOrigin, isMultiOriginEnabled, getRoutingTable } = require('./router');
@@ -674,6 +674,11 @@ function createProxyServer(port, origin, config = null) {
   if (config && config.transformations) {
     configureTransformations(config.transformations);
   }
+  
+  // Preload cache on startup
+  console.log('🔄 Preloading cache from disk...');
+  const preloadStats = preloadCache();
+  displayPreloadStats(preloadStats);
   
   // Configure rate limiting if config provided
   const rateLimitCfg = config && (config.security?.rateLimit || config.rateLimit);
