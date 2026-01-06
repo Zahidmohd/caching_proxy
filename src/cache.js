@@ -31,7 +31,7 @@
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
-const { recordHit, recordMiss } = require('./analytics');
+const { recordHit, recordMiss, recordCompression } = require('./analytics');
 
 // Cache file path
 const CACHE_DIR = path.join(__dirname, '..', 'cache');
@@ -630,6 +630,15 @@ function setCachedResponse(method, url, responseData, hasAuth = false, cacheCont
   };
   
   cache.set(key, cacheEntry);
+  
+  // Track compression statistics
+  if (responseData.body) {
+    const originalSize = Buffer.byteLength(responseData.body, 'utf8');
+    const compressedSize = compressionUsed !== 'none' 
+      ? Buffer.from(compressedBody, 'base64').length 
+      : originalSize;
+    recordCompression(originalSize, compressedSize, compressionUsed);
+  }
   
   // Evict LRU entries if cache exceeds limits
   const evictedCount = evictLRU(cache);

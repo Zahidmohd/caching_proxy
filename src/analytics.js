@@ -46,6 +46,14 @@ function loadAnalytics() {
       totalMissTime: 0,        // Sum of all miss response times
       bandwidthSaved: 0        // Bytes saved from cache hits
     },
+    compression: {
+      totalOriginalBytes: 0,   // Total original size before compression
+      totalCompressedBytes: 0, // Total size after compression
+      entriesCompressed: 0,    // Number of entries compressed
+      gzipCount: 0,           // Number of entries using gzip
+      brotliCount: 0,         // Number of entries using brotli
+      noneCount: 0            // Number of entries with no compression
+    },
     startTime: Date.now()
   };
 }
@@ -212,6 +220,22 @@ function getStats() {
     bandwidthSavedStr = `${bytes} bytes`;
   }
   
+  // Calculate compression statistics
+  const compression = analytics.compression || {
+    totalOriginalBytes: 0,
+    totalCompressedBytes: 0,
+    entriesCompressed: 0,
+    gzipCount: 0,
+    brotliCount: 0,
+    noneCount: 0
+  };
+  
+  const compressionRatio = compression.totalOriginalBytes > 0
+    ? ((1 - compression.totalCompressedBytes / compression.totalOriginalBytes) * 100).toFixed(2)
+    : 0;
+  
+  const totalEntries = compression.gzipCount + compression.brotliCount + compression.noneCount;
+  
   return {
     totalHits: analytics.totalHits,
     totalMisses: analytics.totalMisses,
@@ -228,6 +252,19 @@ function getStats() {
       bandwidthSavedStr,
       hitCount: performance.hitResponseTimes.length,
       missCount: performance.missResponseTimes.length
+    },
+    compression: {
+      totalOriginalBytes: compression.totalOriginalBytes,
+      totalCompressedBytes: compression.totalCompressedBytes,
+      spaceSaved: compression.totalOriginalBytes - compression.totalCompressedBytes,
+      compressionRatio: parseFloat(compressionRatio),
+      entriesCompressed: compression.entriesCompressed,
+      totalEntries,
+      methodBreakdown: {
+        gzip: compression.gzipCount,
+        brotli: compression.brotliCount,
+        none: compression.noneCount
+      }
     }
   };
 }
@@ -245,9 +282,51 @@ function resetAnalytics() {
   saveAnalytics(analytics);
 }
 
+/**
+ * Record compression statistics
+ * @param {number} originalSize - Original size in bytes
+ * @param {number} compressedSize - Compressed size in bytes
+ * @param {string} method - Compression method: 'gzip', 'brotli', or 'none'
+ */
+function recordCompression(originalSize, compressedSize, method = 'none') {
+  const analytics = loadAnalytics();
+  
+  // Initialize compression object if it doesn't exist
+  if (!analytics.compression) {
+    analytics.compression = {
+      totalOriginalBytes: 0,
+      totalCompressedBytes: 0,
+      entriesCompressed: 0,
+      gzipCount: 0,
+      brotliCount: 0,
+      noneCount: 0
+    };
+  }
+  
+  // Update compression statistics
+  analytics.compression.totalOriginalBytes += originalSize;
+  analytics.compression.totalCompressedBytes += compressedSize;
+  
+  if (method !== 'none') {
+    analytics.compression.entriesCompressed++;
+  }
+  
+  // Update method counts
+  if (method === 'gzip') {
+    analytics.compression.gzipCount++;
+  } else if (method === 'brotli') {
+    analytics.compression.brotliCount++;
+  } else {
+    analytics.compression.noneCount++;
+  }
+  
+  saveAnalytics(analytics);
+}
+
 module.exports = {
   recordHit,
   recordMiss,
+  recordCompression,
   getStats,
   resetAnalytics
 };

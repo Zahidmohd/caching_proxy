@@ -375,6 +375,39 @@ function showCacheStats() {
     console.log(`   ℹ️  No requests processed yet`);
   }
   
+  // Compression Statistics
+  if (stats.compression && stats.compression.totalEntries > 0) {
+    console.log(`\n🗜️  Compression Statistics:`);
+    
+    // Format space saved
+    let spaceSavedStr;
+    const spaceSavedBytes = stats.compression.spaceSaved;
+    if (spaceSavedBytes > 1024 * 1024) {
+      spaceSavedStr = `${(spaceSavedBytes / (1024 * 1024)).toFixed(2)} MB`;
+    } else if (spaceSavedBytes > 1024) {
+      spaceSavedStr = `${(spaceSavedBytes / 1024).toFixed(2)} KB`;
+    } else {
+      spaceSavedStr = `${spaceSavedBytes} bytes`;
+    }
+    
+    console.log(`   Compression Ratio:    ${stats.compression.compressionRatio}% saved 📦`);
+    console.log(`   Space Saved:          ${spaceSavedStr}`);
+    console.log(`   Entries Compressed:   ${stats.compression.entriesCompressed} / ${stats.compression.totalEntries}`);
+    
+    if (stats.compression.methodBreakdown.gzip > 0 || stats.compression.methodBreakdown.brotli > 0) {
+      console.log(`   Methods Used:`);
+      if (stats.compression.methodBreakdown.gzip > 0) {
+        console.log(`     • Gzip:   ${stats.compression.methodBreakdown.gzip} entries`);
+      }
+      if (stats.compression.methodBreakdown.brotli > 0) {
+        console.log(`     • Brotli: ${stats.compression.methodBreakdown.brotli} entries`);
+      }
+      if (stats.compression.methodBreakdown.none > 0) {
+        console.log(`     • None:   ${stats.compression.methodBreakdown.none} entries`);
+      }
+    }
+  }
+  
   console.log('\n' + '═'.repeat(60));
   console.log();
 }
