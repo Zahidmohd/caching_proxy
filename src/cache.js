@@ -546,6 +546,47 @@ function getCachedResponse(method, url, startTime = Date.now(), requestId = null
 }
 
 /**
+ * Get stale cache entry for conditional requests (ETag/Last-Modified validation)
+ * @param {string} method - HTTP method
+ * @param {string} url - Complete URL
+ * @param {Object} headers - Request headers (for header-based cache keys)
+ * @returns {Object|null} - Stale cache entry with validation headers, or null
+ * 
+ * Returns an object with:
+ * {
+ *   etag: string|null,
+ *   lastModified: string|null,
+ *   key: string,
+ *   entry: Object
+ * }
+ * 
+ * This is used when cache is expired/missing to send conditional requests to origin.
+ * If origin returns 304, we can serve the stale content and update timestamp.
+ */
+function getStaleEntryForValidation(method, url, headers = {}) {
+  const key = generateCacheKey(method, url, headers);
+  const cache = loadCache();
+  const cached = cache.get(key);
+  
+  if (!cached) {
+    return null;
+  }
+  
+  // Return validation headers even if entry is expired
+  // (We'll use these for conditional requests)
+  if (cached.etag || cached.lastModified) {
+    return {
+      etag: cached.etag || null,
+      lastModified: cached.lastModified || null,
+      key: key,
+      entry: cached
+    };
+  }
+  
+  return null;
+}
+
+/**
  * Calculate cache size in bytes
  * @param {Map} cache - Cache map
  * @returns {number} - Total size in bytes
@@ -1093,6 +1134,7 @@ function getCacheStats() {
 module.exports = {
   generateCacheKey,
   getCachedResponse,
+  getStaleEntryForValidation,
   setCachedResponse,
   clearCache,
   clearCacheByPattern,

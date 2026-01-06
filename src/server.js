@@ -6,7 +6,7 @@
 const http = require('http');
 const https = require('https');
 const { URL } = require('url');
-const { getCachedResponse, setCachedResponse, getCacheStats, configureCacheLimits, configurePatternTTL, configureCompression, configureCacheKeyHeaders } = require('./cache');
+const { getCachedResponse, getStaleEntryForValidation, setCachedResponse, getCacheStats, configureCacheLimits, configurePatternTTL, configureCompression, configureCacheKeyHeaders } = require('./cache');
 const { getStats } = require('./analytics');
 const logger = require('./logger');
 
@@ -330,20 +330,37 @@ function forwardRequest(req, res, origin) {
   // Cache MISS - forward to origin
   console.log(`📤 ${req.method} ${targetUrl.pathname}${targetUrl.search}`);
   
+  // Check for stale cache entry with validation headers (ETag/Last-Modified)
+  const staleEntry = getStaleEntryForValidation(req.method, fullUrl, req.headers);
+  
   // Choose http or https based on origin protocol
   const client = originUrl.protocol === 'https:' ? https : http;
   
   // Prepare request options
   // Supports ALL HTTP methods: GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS, etc.
+  const requestHeaders = {
+    ...req.headers, // ✅ Preserves all original headers (Content-Type, Authorization, custom headers, etc.)
+    host: originUrl.hostname // Override host header to match origin
+  };
+  
+  // Add conditional request headers if we have a stale cache entry
+  if (staleEntry) {
+    if (staleEntry.etag) {
+      requestHeaders['if-none-match'] = staleEntry.etag;
+      console.log(`🔄 Conditional request: If-None-Match: ${staleEntry.etag}`);
+    }
+    if (staleEntry.lastModified) {
+      requestHeaders['if-modified-since'] = staleEntry.lastModified;
+      console.log(`🔄 Conditional request: If-Modified-Since: ${staleEntry.lastModified}`);
+    }
+  }
+  
   const options = {
     hostname: originUrl.hostname,
     port: originUrl.port || (originUrl.protocol === 'https:' ? 443 : 80),
     path: targetUrl.pathname + targetUrl.search, // ✅ Preserves query parameters
     method: req.method, // ✅ Preserves HTTP method (GET, POST, etc.)
-    headers: {
-      ...req.headers, // ✅ Preserves all original headers (Content-Type, Authorization, custom headers, etc.)
-      host: originUrl.hostname // Override host header to match origin
-    }
+    headers: requestHeaders
   };
   
   // Forward the request to origin server
