@@ -432,6 +432,58 @@ function showCacheStats() {
     }
   }
   
+  // Rate Limit Metrics
+  try {
+    const { getRateLimitMetrics } = require('./rateLimit');
+    const rateLimitMetrics = getRateLimitMetrics();
+    
+    // Show metrics if there are any events (regardless of current enabled state)
+    if (rateLimitMetrics.totalEvents > 0) {
+      console.log(`\n🛡️  Rate Limit Metrics:`);
+      console.log(`   Total Events:         ${rateLimitMetrics.totalEvents.toLocaleString()}`);
+      
+      if (rateLimitMetrics.totalRateLimited > 0) {
+        console.log(`   Rate Limited:         ${rateLimitMetrics.totalRateLimited.toLocaleString()} requests blocked`);
+        console.log(`   Unique IPs Limited:   ${rateLimitMetrics.uniqueIPsRateLimited}`);
+        
+        // Show limit type breakdown
+        const types = [];
+        if (rateLimitMetrics.limitTypes.perMinute > 0) {
+          types.push(`${rateLimitMetrics.limitTypes.perMinute} per-minute`);
+        }
+        if (rateLimitMetrics.limitTypes.perHour > 0) {
+          types.push(`${rateLimitMetrics.limitTypes.perHour} per-hour`);
+        }
+        if (rateLimitMetrics.limitTypes.global > 0) {
+          types.push(`${rateLimitMetrics.limitTypes.global} global`);
+        }
+        if (types.length > 0) {
+          console.log(`   Limit Types:          ${types.join(', ')}`);
+        }
+      }
+      
+      if (rateLimitMetrics.totalWhitelisted > 0) {
+        console.log(`   Whitelisted:          ${rateLimitMetrics.totalWhitelisted.toLocaleString()} requests bypassed`);
+        console.log(`   Unique IPs Whitelisted: ${rateLimitMetrics.uniqueIPsWhitelisted}`);
+      }
+      
+      if (rateLimitMetrics.totalBlacklisted > 0) {
+        console.log(`   Blacklisted:          ${rateLimitMetrics.totalBlacklisted.toLocaleString()} requests blocked`);
+        console.log(`   Unique IPs Blacklisted: ${rateLimitMetrics.uniqueIPsBlacklisted}`);
+      }
+      
+      // Top rate limited IPs
+      if (rateLimitMetrics.topRateLimitedIPs.length > 0) {
+        console.log(`\n   Top Rate Limited IPs:`);
+        rateLimitMetrics.topRateLimitedIPs.slice(0, 5).forEach((entry, index) => {
+          console.log(`     ${index + 1}. ${entry.ip}: ${entry.count} times`);
+        });
+      }
+    }
+  } catch (e) {
+    // Rate limiting module not available or error
+  }
+  
   console.log('\n' + '═'.repeat(60));
   console.log();
 }

@@ -8,7 +8,7 @@ const https = require('https');
 const { URL } = require('url');
 const { getCachedResponse, getStaleEntryForValidation, refreshCacheTimestamp, setCachedResponse, getCacheStats, configureCacheLimits, configurePatternTTL, configureCompression, configureCacheKeyHeaders } = require('./cache');
 const { getStats, recordRevalidation, recordBytesFromOrigin, recordBytesServed } = require('./analytics');
-const { configureRateLimit, getClientIP, checkRateLimit, recordRequest } = require('./rateLimit');
+const { configureRateLimit, getClientIP, checkRateLimit, recordRequest, startCleanup } = require('./rateLimit');
 const logger = require('./logger');
 
 // Track server start time for uptime
@@ -557,15 +557,22 @@ function createProxyServer(port, origin, config = null) {
   }
   
   // Configure rate limiting if config provided
-  if (config && config.rateLimit) {
+  const rateLimitCfg = config && (config.security?.rateLimit || config.rateLimit);
+  if (rateLimitCfg) {
+    const rateLimitEnabled = rateLimitCfg.enabled !== false;
     configureRateLimit({
-      enabled: config.rateLimit.enabled !== false, // Default to true if present
-      requestsPerMinute: config.rateLimit.requestsPerMinute || 60,
-      requestsPerHour: config.rateLimit.requestsPerHour || 1000,
-      globalLimit: config.rateLimit.globalLimit || null,
-      whitelist: config.rateLimit.whitelist || [],
-      blacklist: config.rateLimit.blacklist || []
+      enabled: rateLimitEnabled, // Default to true if present
+      requestsPerMinute: rateLimitCfg.requestsPerMinute || 60,
+      requestsPerHour: rateLimitCfg.requestsPerHour || 1000,
+      globalLimit: rateLimitCfg.globalLimit || null,
+      whitelist: rateLimitCfg.whitelist || [],
+      blacklist: rateLimitCfg.blacklist || []
     });
+    
+    // Start periodic cleanup if rate limiting is enabled
+    if (rateLimitEnabled) {
+      startCleanup();
+    }
   } else {
     // Default: rate limiting disabled
     configureRateLimit({ enabled: false });

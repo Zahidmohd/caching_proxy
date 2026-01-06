@@ -3,9 +3,88 @@
  * Tracks and limits requests by IP address
  */
 
+const fs = require('fs');
+const path = require('path');
+
+// File paths
+const CACHE_DIR = path.join(process.cwd(), 'cache');
+const METRICS_FILE = path.join(CACHE_DIR, 'rate-limit-metrics.json');
+
+/**
+ * Ensure cache directory exists
+ */
+function ensureCacheDir() {
+  if (!fs.existsSync(CACHE_DIR)) {
+    fs.mkdirSync(CACHE_DIR, { recursive: true });
+  }
+}
+
+/**
+ * Load rate limit metrics from file
+ */
+function loadMetricsFromFile() {
+  try {
+    ensureCacheDir();
+    if (fs.existsSync(METRICS_FILE)) {
+      const data = fs.readFileSync(METRICS_FILE, 'utf8');
+      const loaded = JSON.parse(data);
+      
+      // Convert arrays back to Maps
+      return {
+        totalRateLimited: loaded.totalRateLimited || 0,
+        totalBlacklisted: loaded.totalBlacklisted || 0,
+        totalWhitelisted: loaded.totalWhitelisted || 0,
+        rateLimitedIPs: new Map(loaded.rateLimitedIPs || []),
+        blacklistedAttempts: new Map(loaded.blacklistedAttempts || []),
+        whitelistedRequests: new Map(loaded.whitelistedRequests || []),
+        limitTypes: loaded.limitTypes || { perMinute: 0, perHour: 0, global: 0 },
+        startTime: loaded.startTime || Date.now()
+      };
+    }
+  } catch (error) {
+    console.error('Error loading rate limit metrics:', error.message);
+  }
+  
+  return {
+    totalRateLimited: 0,
+    totalBlacklisted: 0,
+    totalWhitelisted: 0,
+    rateLimitedIPs: new Map(),
+    blacklistedAttempts: new Map(),
+    whitelistedRequests: new Map(),
+    limitTypes: { perMinute: 0, perHour: 0, global: 0 },
+    startTime: Date.now()
+  };
+}
+
+/**
+ * Save rate limit metrics to file
+ */
+function saveMetricsToFile() {
+  try {
+    ensureCacheDir();
+    const dataToSave = {
+      totalRateLimited: rateLimitMetrics.totalRateLimited,
+      totalBlacklisted: rateLimitMetrics.totalBlacklisted,
+      totalWhitelisted: rateLimitMetrics.totalWhitelisted,
+      rateLimitedIPs: Array.from(rateLimitMetrics.rateLimitedIPs.entries()),
+      blacklistedAttempts: Array.from(rateLimitMetrics.blacklistedAttempts.entries()),
+      whitelistedRequests: Array.from(rateLimitMetrics.whitelistedRequests.entries()),
+      limitTypes: rateLimitMetrics.limitTypes,
+      startTime: rateLimitMetrics.startTime
+    };
+    fs.writeFileSync(METRICS_FILE, JSON.stringify(dataToSave, null, 2), 'utf8');
+  } catch (error) {
+    console.error('Error saving rate limit metrics:', error.message);
+  }
+}
+
 // Store for tracking requests per IP
 // Structure: { ipAddress: [timestamp1, timestamp2, ...] }
 const requestLog = new Map();
+
+// Metrics tracking - load from file on module initialization
+const rateLimitMetrics = loadMetricsFromFile();
 
 // Configuration
 let rateLimitConfig = {
@@ -205,6 +284,35 @@ function countGlobalRequests(windowStart) {
 }
 
 /**
+ * Record a metric event
+ * @param {string} type - Type of event (rateLimited, blacklisted, whitelisted)
+ * @param {string} ip - IP address
+ * @param {string} limitType - Type of limit hit (perMinute, perHour, global)
+ */
+function recordMetric(type, ip, limitType = null) {
+  if (type === 'rateLimited') {
+    rateLimitMetrics.totalRateLimited++;
+    const count = rateLimitMetrics.rateLimitedIPs.get(ip) || 0;
+    rateLimitMetrics.rateLimitedIPs.set(ip, count + 1);
+    
+    if (limitType) {
+      rateLimitMetrics.limitTypes[limitType]++;
+    }
+  } else if (type === 'blacklisted') {
+    rateLimitMetrics.totalBlacklisted++;
+    const count = rateLimitMetrics.blacklistedAttempts.get(ip) || 0;
+    rateLimitMetrics.blacklistedAttempts.set(ip, count + 1);
+  } else if (type === 'whitelisted') {
+    rateLimitMetrics.totalWhitelisted++;
+    const count = rateLimitMetrics.whitelistedRequests.get(ip) || 0;
+    rateLimitMetrics.whitelistedRequests.set(ip, count + 1);
+  }
+  
+  // Save metrics to file after recording
+  saveMetricsToFile();
+}
+
+/**
  * Check if an IP address is rate limited
  * @param {string} ip - IP address to check
  * @returns {Object} - { allowed: boolean, retryAfter: number|null, limit: string|null }
@@ -212,6 +320,7 @@ function countGlobalRequests(windowStart) {
 function checkRateLimit(ip) {
   // Check blacklist first - blocked IPs always get denied
   if (isBlacklisted(ip)) {
+    recordMetric('blacklisted', ip);
     return {
       allowed: false,
       retryAfter: null,
@@ -224,6 +333,7 @@ function checkRateLimit(ip) {
   
   // Check whitelist - whitelisted IPs bypass all rate limiting
   if (isWhitelisted(ip)) {
+    recordMetric('whitelisted', ip);
     return {
       allowed: true,
       retryAfter: null,
@@ -245,6 +355,7 @@ function checkRateLimit(ip) {
     const globalRequestsLastMinute = countGlobalRequests(oneMinuteAgo);
     
     if (globalRequestsLastMinute >= rateLimitConfig.globalLimit) {
+      recordMetric('rateLimited', ip, 'global');
       return {
         allowed: false,
         retryAfter: 60,
@@ -270,6 +381,7 @@ function checkRateLimit(ip) {
     const oldestInWindow = timestamps.find(ts => ts > oneMinuteAgo);
     const retryAfter = oldestInWindow ? Math.ceil((oldestInWindow + 60000 - now) / 1000) : 60;
     
+    recordMetric('rateLimited', ip, 'perMinute');
     return {
       allowed: false,
       retryAfter,
@@ -284,6 +396,7 @@ function checkRateLimit(ip) {
     const oldestInWindow = timestamps.find(ts => ts > oneHourAgo);
     const retryAfter = oldestInWindow ? Math.ceil((oldestInWindow + 3600000 - now) / 1000) : 3600;
     
+    recordMetric('rateLimited', ip, 'perHour');
     return {
       allowed: false,
       retryAfter,
@@ -369,19 +482,129 @@ function getRateLimitStats() {
   // Sort by most active IPs
   stats.tracked.ips.sort((a, b) => b.requestsLastMinute - a.requestsLastMinute);
   
+  // Add metrics
+  stats.metrics = {
+    totalRateLimited: rateLimitMetrics.totalRateLimited,
+    totalBlacklisted: rateLimitMetrics.totalBlacklisted,
+    totalWhitelisted: rateLimitMetrics.totalWhitelisted,
+    limitTypes: { ...rateLimitMetrics.limitTypes },
+    uptime: Date.now() - rateLimitMetrics.startTime,
+    topRateLimitedIPs: Array.from(rateLimitMetrics.rateLimitedIPs.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([ip, count]) => ({ ip, count })),
+    topBlacklistedIPs: Array.from(rateLimitMetrics.blacklistedAttempts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([ip, count]) => ({ ip, count })),
+    topWhitelistedIPs: Array.from(rateLimitMetrics.whitelistedRequests.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([ip, count]) => ({ ip, count }))
+  };
+  
   return stats;
 }
 
 /**
- * Reset rate limit tracking
+ * Get rate limit metrics only
+ * @returns {Object} - Rate limit metrics
+ */
+function getRateLimitMetrics() {
+  const uptime = Date.now() - rateLimitMetrics.startTime;
+  const uptimeSeconds = Math.floor(uptime / 1000);
+  const uptimeMinutes = Math.floor(uptimeSeconds / 60);
+  const uptimeHours = Math.floor(uptimeMinutes / 60);
+  
+  let uptimeStr;
+  if (uptimeHours > 0) {
+    uptimeStr = `${uptimeHours}h ${uptimeMinutes % 60}m ${uptimeSeconds % 60}s`;
+  } else if (uptimeMinutes > 0) {
+    uptimeStr = `${uptimeMinutes}m ${uptimeSeconds % 60}s`;
+  } else {
+    uptimeStr = `${uptimeSeconds}s`;
+  }
+  
+  return {
+    enabled: rateLimitConfig.enabled,
+    totalEvents: rateLimitMetrics.totalRateLimited + rateLimitMetrics.totalBlacklisted + rateLimitMetrics.totalWhitelisted,
+    totalRateLimited: rateLimitMetrics.totalRateLimited,
+    totalBlacklisted: rateLimitMetrics.totalBlacklisted,
+    totalWhitelisted: rateLimitMetrics.totalWhitelisted,
+    limitTypes: {
+      perMinute: rateLimitMetrics.limitTypes.perMinute,
+      perHour: rateLimitMetrics.limitTypes.perHour,
+      global: rateLimitMetrics.limitTypes.global
+    },
+    uniqueIPsRateLimited: rateLimitMetrics.rateLimitedIPs.size,
+    uniqueIPsBlacklisted: rateLimitMetrics.blacklistedAttempts.size,
+    uniqueIPsWhitelisted: rateLimitMetrics.whitelistedRequests.size,
+    uptime: uptimeStr,
+    uptimeMs: uptime,
+    topRateLimitedIPs: Array.from(rateLimitMetrics.rateLimitedIPs.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([ip, count]) => ({ ip, count })),
+    topBlacklistedIPs: Array.from(rateLimitMetrics.blacklistedAttempts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([ip, count]) => ({ ip, count })),
+    topWhitelistedIPs: Array.from(rateLimitMetrics.whitelistedRequests.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([ip, count]) => ({ ip, count }))
+  };
+}
+
+/**
+ * Reset rate limit tracking and metrics
  */
 function resetRateLimits() {
   requestLog.clear();
-  console.log('✅ Rate limit tracking reset');
+  
+  // Reset metrics
+  rateLimitMetrics.totalRateLimited = 0;
+  rateLimitMetrics.totalBlacklisted = 0;
+  rateLimitMetrics.totalWhitelisted = 0;
+  rateLimitMetrics.rateLimitedIPs.clear();
+  rateLimitMetrics.blacklistedAttempts.clear();
+  rateLimitMetrics.whitelistedRequests.clear();
+  rateLimitMetrics.limitTypes = { perMinute: 0, perHour: 0, global: 0 };
+  rateLimitMetrics.startTime = Date.now();
+  
+  // Delete metrics file
+  try {
+    if (fs.existsSync(METRICS_FILE)) {
+      fs.unlinkSync(METRICS_FILE);
+    }
+  } catch (error) {
+    console.error('Error deleting metrics file:', error.message);
+  }
+  
+  console.log('✅ Rate limit tracking and metrics reset');
 }
 
-// Periodic cleanup (every 5 minutes)
-setInterval(cleanupOldEntries, 5 * 60 * 1000);
+// Cleanup interval reference
+let cleanupInterval = null;
+
+/**
+ * Start periodic cleanup (called when server starts)
+ */
+function startCleanup() {
+  if (!cleanupInterval) {
+    cleanupInterval = setInterval(cleanupOldEntries, 5 * 60 * 1000);
+  }
+}
+
+/**
+ * Stop periodic cleanup (called when server stops)
+ */
+function stopCleanup() {
+  if (cleanupInterval) {
+    clearInterval(cleanupInterval);
+    cleanupInterval = null;
+  }
+}
 
 module.exports = {
   configureRateLimit,
@@ -389,8 +612,11 @@ module.exports = {
   checkRateLimit,
   recordRequest,
   getRateLimitStats,
+  getRateLimitMetrics,
   resetRateLimits,
   isWhitelisted,
-  isBlacklisted
+  isBlacklisted,
+  startCleanup,
+  stopCleanup
 };
 
