@@ -27,7 +27,8 @@ const DEFAULT_CONFIG = {
       autoClear: true,
       maxVersions: 3,
       allowVersionHeader: false,
-      versionHeader: 'X-API-Version'
+      versionHeader: 'X-API-Version',
+      versionTTL: {}
     }
   },
   security: {

@@ -6,7 +6,7 @@
 const http = require('http');
 const https = require('https');
 const { URL } = require('url');
-const { getCachedResponse, getStaleEntryForValidation, refreshCacheTimestamp, setCachedResponse, getCacheStats, configureCacheLimits, configurePatternTTL, configureCompression, configureCacheKeyHeaders } = require('./cache');
+const { getCachedResponse, getStaleEntryForValidation, refreshCacheTimestamp, setCachedResponse, getCacheStats, configureCacheLimits, configurePatternTTL, configureVersionTTL, configureCompression, configureCacheKeyHeaders } = require('./cache');
 const { getStats, recordRevalidation, recordBytesFromOrigin, recordBytesServed } = require('./analytics');
 const { configureRateLimit, getClientIP, checkRateLimit, recordRequest, startCleanup } = require('./rateLimit');
 const { configureRouter, matchOrigin, isMultiOriginEnabled, getRoutingTable } = require('./router');
@@ -577,6 +577,11 @@ function createProxyServer(port, origin, config = null) {
     // Configure pattern-based TTL if provided
     if (config.cache.customTTL) {
       configurePatternTTL(config.cache.customTTL);
+    }
+    
+    // Configure version-specific TTL if provided
+    if (config.cache.versioning?.versionTTL) {
+      configureVersionTTL(config.cache.versioning.versionTTL);
     }
     
     // Configure compression if provided

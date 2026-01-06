@@ -70,6 +70,9 @@ let MAX_CACHE_SIZE_MB = 100;   // Maximum cache size in MB
 // Compression configuration
 let COMPRESSION_METHOD = 'gzip'; // Options: 'gzip', 'brotli', 'none'
 
+// Version-specific TTL configuration
+let VERSION_TTL = {}; // { "v1": 600, "v2": 300 } - TTL in seconds per version
+
 // Header-based cache keys configuration
 let CACHE_KEY_HEADERS = []; // Headers to include in cache key (e.g., ['accept-language', 'accept-encoding'])
 
@@ -180,6 +183,15 @@ function mergeVaryHeaders(varyHeaders, configHeaders) {
 function configurePatternTTL(patterns = {}) {
   PATTERN_TTL_CONFIG = { ...patterns };
   console.log(`🕒 Configured ${Object.keys(PATTERN_TTL_CONFIG).length} pattern-based TTL rules`);
+}
+
+/**
+ * Configure version-specific TTL
+ * @param {Object} versionTTL - Object mapping version names to TTL in seconds
+ */
+function configureVersionTTL(versionTTL = {}) {
+  VERSION_TTL = { ...versionTTL };
+  console.log(`⏱️  Configured ${Object.keys(VERSION_TTL).length} version-specific TTL(s)`);
 }
 
 /**
@@ -321,18 +333,23 @@ function getTTLForURL(url) {
  *   determineTTL("https://api.com/unknown", null)
  *     => 300000 (5 minutes default)
  */
-function determineTTL(url, cacheControl) {
+function determineTTL(url, cacheControl, version = null) {
   // Priority 1: Check Cache-Control max-age
   const maxAgeTTL = extractTTLFromCacheControl(cacheControl);
   if (maxAgeTTL !== null) {
     return maxAgeTTL;
   }
   
-  // Priority 2: Check custom pattern-based TTL
+  // Priority 2: Check version-specific TTL
+  if (version && VERSION_TTL[version]) {
+    return VERSION_TTL[version] * 1000; // Convert seconds to milliseconds
+  }
+  
+  // Priority 3: Check custom pattern-based TTL
   const patternTTL = getTTLForURL(url);
   return patternTTL;
   
-  // Priority 3 is handled inside getTTLForURL() which returns DEFAULT_CACHE_TTL if no pattern matches
+  // Priority 4 is handled inside getTTLForURL() which returns DEFAULT_CACHE_TTL if no pattern matches
 }
 
 /**
@@ -635,7 +652,7 @@ function refreshCacheTimestamp(method, url, headers = {}, origin = null, version
   }
   
   // Determine new TTL
-  const newTTL = ttl || determineTTL(url, cacheControl);
+  const newTTL = ttl || determineTTL(url, cacheControl, version);
   
   // Update timestamps
   const now = Date.now();
@@ -854,8 +871,8 @@ function setCachedResponse(method, url, responseData, hasAuth = false, cacheCont
   const key = generateCacheKey(method, url, headersToUse, origin, version);
   const cache = loadCache();
   
-  // Determine TTL based on priority: Cache-Control > Custom Config > Default
-  const ttl = determineTTL(url, cacheControl);
+  // Determine TTL based on priority: Cache-Control > Version-specific > Pattern-based > Default
+  const ttl = determineTTL(url, cacheControl, version);
   
   // Compress the response body before storing
   let compressedBody = responseData.body;
@@ -1252,6 +1269,7 @@ module.exports = {
   configureCompression,
   configureCacheKeyHeaders,
   configurePatternTTL,
+  configureVersionTTL,
   matchPattern,
   getTTLForURL,
   extractTTLFromCacheControl,
