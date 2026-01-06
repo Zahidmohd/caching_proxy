@@ -30,6 +30,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const zlib = require('zlib');
 const { recordHit, recordMiss } = require('./analytics');
 
 // Cache file path
@@ -343,8 +344,22 @@ function getCachedResponse(method, url, startTime = Date.now(), requestId = null
     cache.set(key, cached);
     saveCache(cache);
     
-    // Calculate data size from cached body
-    const dataSize = cached.body ? Buffer.byteLength(cached.body, 'utf8') : 0;
+    // Decompress the body if it was compressed
+    let decompressedBody = cached.body;
+    if (cached.compressed && cached.body) {
+      try {
+        // Decompress gzip data from base64
+        const compressedBuffer = Buffer.from(cached.body, 'base64');
+        decompressedBody = zlib.gunzipSync(compressedBuffer).toString('utf8');
+      } catch (error) {
+        console.log(`⚠️  Decompression failed for ${key}: ${error.message}`);
+        // Fall back to returning as-is
+        decompressedBody = cached.body;
+      }
+    }
+    
+    // Calculate data size from decompressed body
+    const dataSize = decompressedBody ? Buffer.byteLength(decompressedBody, 'utf8') : 0;
     recordHit(key, responseTime, dataSize); // Record cache hit with timing and size
     
     // Log cache event with request ID
@@ -356,7 +371,12 @@ function getCachedResponse(method, url, startTime = Date.now(), requestId = null
       requestId
     });
     
-    return cached;
+    // Return cached entry with decompressed body
+    return {
+      statusCode: cached.statusCode,
+      headers: cached.headers,
+      body: decompressedBody
+    };
   } else {
     const responseTime = Date.now() - startTime;
     console.log(`❌ Cache MISS: ${key}`);
@@ -543,10 +563,30 @@ function setCachedResponse(method, url, responseData, hasAuth = false, cacheCont
   // Determine TTL based on priority: Cache-Control > Custom Config > Default
   const ttl = determineTTL(url, cacheControl);
   
+  // Compress the response body using gzip before storing
+  let compressedBody = responseData.body;
+  let isCompressed = false;
+  
+  if (responseData.body) {
+    try {
+      // Compress the body using gzip
+      compressedBody = zlib.gzipSync(responseData.body).toString('base64');
+      isCompressed = true;
+    } catch (error) {
+      console.log(`⚠️  Compression failed for ${key}: ${error.message}`);
+      // Fall back to storing uncompressed
+      compressedBody = responseData.body;
+      isCompressed = false;
+    }
+  }
+  
   // Add expiration timestamp and access time to cache entry
   const now = Date.now();
   const cacheEntry = {
-    ...responseData,
+    statusCode: responseData.statusCode,
+    headers: responseData.headers,
+    body: compressedBody,
+    compressed: isCompressed, // Flag to indicate if body is compressed
     cachedAt: now,
     expiresAt: now + ttl,
     lastAccessTime: now // Track for LRU eviction
