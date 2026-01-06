@@ -33,9 +33,44 @@ A production-ready, feature-rich HTTP caching proxy server built with Node.js. T
 - 🔥 **Cache Warming** - Pre-populate cache from URL lists
 - 🎯 **Flexible Invalidation** - Pattern-based, URL-specific, time-based cache clearing
 
-## 📖 Detailed Examples
+## 📦 Installation
 
-### Example 1: Basic Usage with DummyJSON API
+### Prerequisites
+- Node.js v14 or higher
+- npm (comes with Node.js)
+
+### Quick Start
+
+```bash
+# Clone the repository
+git clone <your-repo-url>
+cd caching-proxy
+
+# Install dependencies
+npm install
+
+# Make it globally available
+npm link
+
+# Start the proxy server
+caching-proxy --port 3000 --origin https://dummyjson.com
+```
+
+### Alternative: Run Without Global Install
+
+```bash
+# Clone and install
+git clone <your-repo-url>
+cd caching-proxy
+npm install
+
+# Run directly
+node src/index.js --port 3000 --origin https://dummyjson.com
+```
+
+## 🚀 Quick Usage Examples
+
+### Example 1: Basic Usage
 
 ```bash
 # Start the proxy
@@ -44,176 +79,19 @@ caching-proxy --port 3000 --origin https://dummyjson.com
 # In another terminal, make requests
 curl http://localhost:3000/products/1        # MISS - fetches from origin
 curl http://localhost:3000/products/1        # HIT - serves from cache
-curl http://localhost:3000/products/2        # MISS - different endpoint
-curl http://localhost:3000/products/2        # HIT - cached
 
 # Clear cache when needed
 caching-proxy --clear-cache
 ```
 
-### Example 2: With Query Parameters
+### Example 2: With Web Dashboard
 
 ```bash
-# Query parameters are part of the cache key
-curl http://localhost:3000/products?limit=10     # MISS
-curl http://localhost:3000/products?limit=10     # HIT
-curl http://localhost:3000/products?limit=20     # MISS (different query)
-```
-
-### Example 3: Testing Cache Headers
-
-```bash
-# First request shows MISS
-curl -i http://localhost:3000/products/1 | grep x-cache
-# x-cache: MISS
-
-# Second request shows HIT
-curl -i http://localhost:3000/products/1 | grep x-cache
-# x-cache: HIT
-```
-
-### Example 4: Multiple HTTP Methods
-
-```bash
-# GET request
-curl http://localhost:3000/products/1
-
-# POST request (not cached by most APIs, but supported)
-curl -X POST -H "Content-Type: application/json" \
-  -d '{"title":"Test"}' \
-  http://localhost:3000/products/add
-
-# PUT request
-curl -X PUT -H "Content-Type: application/json" \
-  -d '{"title":"Updated"}' \
-  http://localhost:3000/products/1
-```
-
-### Example 5: Advanced Cache Management
-
-```bash
-# Preview what would be deleted (dry-run mode)
-caching-proxy --clear-cache --dry-run
-caching-proxy --clear-cache-pattern "/products/*" --dry-run
-
-# Clear cache by URL pattern
-caching-proxy --clear-cache-pattern "/products/*"    # Clear all products
-caching-proxy --clear-cache-pattern "/api/**"        # Clear all API routes
-
-# Clear specific URL
-caching-proxy --clear-cache-url "https://api.com/products/1"
-
-# Clear old cache entries
-caching-proxy --clear-cache-older-than 1h    # Older than 1 hour
-caching-proxy --clear-cache-older-than 30m   # Older than 30 minutes
-caching-proxy --clear-cache-older-than 2d    # Older than 2 days
-
-# View cache statistics
-caching-proxy --cache-stats
-caching-proxy --cache-list
-```
-
-### Example 6: Cache Warming
-
-```bash
-# Create a file with URLs to warm (one per line)
-cat > warm-urls.txt << EOF
-# Products
-/products/1
-/products/2
-/products/3
-
-# Users
-/users/1
-/users/2
-
-# Categories
-/categories
-EOF
-
-# Warm the cache by pre-fetching these URLs
-caching-proxy --warm-cache warm-urls.txt --origin https://dummyjson.com
-
-# Output:
-# 🔥 Cache Warming
-# ════════════════════════════════════════════════════════════
-# 
-# 📁 Reading URLs from: warm-urls.txt
-# 🌐 Origin server: https://dummyjson.com
-# 
-# 📋 Found 6 URLs to warm
-# 
-# [1/6] Fetching: /products/1 ... ✅ 200 (cached)
-# [2/6] Fetching: /products/2 ... ✅ 200 (cached)
-# ...
-# 
-# 📊 Cache Warming Summary
-#    Total URLs:        6
-#    Successful:        6 ✅
-#    Cached:            6 💾
-#    Duration:          1.5s
-```
-
-### Example 7: Header-Based Cache Keys
-
-```bash
-# Create a configuration file with header-based cache keys
-cat > proxy.config.json << EOF
-{
-  "server": {
-    "port": 3000,
-    "origin": "https://api.example.com"
-  },
-  "cache": {
-    "cacheKeyHeaders": ["accept-language", "accept-encoding"]
-  }
-}
-EOF
-
-# Start the proxy
-caching-proxy --config proxy.config.json
-
-# Same URL with different Accept-Language headers creates separate cache entries
-curl -H "Accept-Language: en-US" http://localhost:3000/api/data    # MISS - caches with en-US
-curl -H "Accept-Language: fr-FR" http://localhost:3000/api/data    # MISS - caches with fr-FR
-curl -H "Accept-Language: en-US" http://localhost:3000/api/data    # HIT - serves en-US cached version
-
-# Check cache stats to see both entries
-caching-proxy --cache-stats --config proxy.config.json
-
-# Cache keys include a hash of the header values:
-# GET:https://api.example.com/api/data:a1b2c3d4 (en-US)
-# GET:https://api.example.com/api/data:x9y8z7w6 (fr-FR)
-```
-
-### Example 8: Web Dashboard
-
-```bash
-# Start proxy with real-time web dashboard
+# Start proxy with real-time dashboard
 caching-proxy --port 3000 --origin https://dummyjson.com --dashboard 4000
 
-# Dashboard automatically opens on http://localhost:4000
-# Shows real-time:
-#   • Live request counts and cache hit rates
-#   • Performance metrics (response times, speedup factor)
-#   • Bandwidth savings and efficiency
-#   • List of all cached URLs with search/filter
-#   • Interactive cache management (delete entries, clear cache)
-#   • Server health and uptime
-#   • Top requested URLs
-
-# Or use config file
-cat > proxy.config.json << EOF
-{
-  "server": {
-    "port": 3000,
-    "origin": "https://dummyjson.com",
-    "dashboardPort": 4000
-  }
-}
-EOF
-
-caching-proxy --config proxy.config.json
+# Open http://localhost:4000 in your browser
+# See live metrics, manage cache, view performance stats
 ```
 
 **Dashboard Features**:
@@ -221,10 +99,70 @@ caching-proxy --config proxy.config.json
 - 🎨 Modern dark theme UI with smooth animations
 - 🔍 Search and filter cached URLs
 - 🗑️ Interactive cache management (delete/clear)
-- 📈 Performance charts and statistics
-- 💾 Bandwidth savings visualization
-- ⚡ Live cache hit/miss tracking
+- 📈 Performance charts and bandwidth savings
 - 🏥 Origin server health monitoring
+
+### Example 3: Using Configuration File
+
+```bash
+# Create config file
+cat > proxy.config.json << EOF
+{
+  "server": {
+    "port": 3000,
+    "origin": "https://dummyjson.com",
+    "dashboardPort": 4000
+  },
+  "cache": {
+    "defaultTTL": 300,
+    "maxEntries": 1000,
+    "maxSizeMB": 100,
+    "cacheKeyHeaders": ["accept-language"]
+  },
+  "logging": {
+    "level": "info",
+    "format": "text"
+  }
+}
+EOF
+
+# Start with config
+caching-proxy --config proxy.config.json
+```
+
+### Example 4: Cache Warming
+
+```bash
+# Create a file with URLs to pre-fetch
+cat > warm-urls.txt << EOF
+/products/1
+/products/2
+/users/1
+/categories
+EOF
+
+# Warm the cache
+caching-proxy --warm-cache warm-urls.txt --origin https://dummyjson.com
+```
+
+### Example 5: Advanced Cache Management
+
+```bash
+# View cache statistics
+caching-proxy --cache-stats
+
+# List all cached URLs
+caching-proxy --cache-list
+
+# Clear cache by pattern
+caching-proxy --clear-cache-pattern "/products/*"
+
+# Clear cache older than 1 hour
+caching-proxy --clear-cache-older-than 1h
+
+# Preview what would be deleted (dry-run)
+caching-proxy --clear-cache-pattern "/api/*" --dry-run
+```
 
 ## 🔧 How It Works
 
@@ -238,7 +176,7 @@ caching-proxy --config proxy.config.json
                    → Receive response
                    → Add X-Cache: MISS header
                    → Return to client
-                   → Store in cache (if 2xx)
+                   → Store in cache (if cacheable)
 ```
 
 ### Caching Strategy
@@ -249,7 +187,7 @@ caching-proxy --config proxy.config.json
 - ✅ Only **non-authenticated** requests (no Authorization header or cookies)
 - ✅ Only when origin allows (respects Cache-Control headers)
 - ✅ Complete response: status code, headers, and body
-- ✅ With **5-minute TTL** (auto-expires after 300 seconds)
+- ✅ With **5-minute TTL by default** (configurable)
 - ✅ Query parameters are part of the cache key
 - ✅ Optional header-based cache keys for content negotiation
 
@@ -257,20 +195,22 @@ caching-proxy --config proxy.config.json
 - ❌ Non-GET methods (POST, PUT, DELETE, PATCH, etc.)
 - ❌ Authenticated requests (Authorization header or cookies present)
 - ❌ Responses with `Cache-Control: no-store`, `no-cache`, or `private`
-- ❌ Client errors (4xx) - 404, 401, 403, etc.
-- ❌ Server errors (5xx) - 500, 502, 503, etc.
-- ❌ Redirects (3xx) - 301, 302, 307, etc.
-- ❌ Expired entries (older than 5 minutes)
+- ❌ Client errors (4xx) and server errors (5xx)
+- ❌ Redirects (3xx)
+- ❌ Expired entries
 
 ### Cache Key Format
 
 ```
-METHOD:URL
-
+Basic: METHOD:URL
 Examples:
 - GET:https://dummyjson.com/products/1
 - GET:https://dummyjson.com/products?limit=10
-- POST:https://dummyjson.com/products/add
+
+With Headers: METHOD:URL:HEADER_HASH
+Examples:
+- GET:https://api.com/data:a1b2c3d4 (with Accept-Language: en-US)
+- GET:https://api.com/data:x9y8z7w6 (with Accept-Language: fr-FR)
 ```
 
 ### LRU (Least Recently Used) Eviction
@@ -297,199 +237,47 @@ The cache automatically manages its size to prevent unlimited growth:
 }
 ```
 
-**Example Log Output:**
-```
-🗑️  LRU Eviction: Removed 2 entries (Cache: 998 entries, 98.5 MB)
-💾 Cached: GET:https://api.com/data (TTL: 5min, 998 entries, 98.5 MB) [Evicted 2]
-```
-
-## ✨ Features
-
-- ✅ **Proxy Forwarding:** HTTP & HTTPS origin servers supported
-- ✅ **All HTTP Methods:** GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS, etc.
-- ✅ **Request Preservation:**
-  - Query parameters (`?limit=10&skip=5`)
-  - All request headers (Content-Type, Authorization, custom)
-  - Request body (JSON, form data, binary) via streaming
-  - HTTP methods and status codes
-- ✅ **Smart Caching:**
-  - Only cache GET requests (not POST, PUT, DELETE)
-  - Only cache 2xx responses
-  - Avoid authenticated requests (no Authorization/cookies)
-  - Respect Cache-Control headers (no-store, no-cache, private)
-  - 5-minute TTL with auto-expiration
-  - LRU eviction (max 1000 entries, 100 MB by default)
-  - File-based persistent storage (`cache/cache-data.json`)
-  - Method and URL specific caching
-  - Query parameter aware
-  - Optional header-based cache keys for content negotiation
-- ✅ **Cache Indicators:**
-  - `X-Cache: HIT` - Response served from cache (fast!)
-  - `X-Cache: MISS` - Response fetched from origin
-- ✅ **Cache Management:**
-  - `--clear-cache` command
-  - Shows cache statistics before clearing
-  - User-friendly confirmation messages
-
-## 📦 Installation
-
-### Option 1: Clone and Install Locally
-
-```bash
-# Clone the repository
-git clone <your-repo-url>
-cd caching-proxy
-
-# Install dependencies
-npm install
-
-# Make it globally available
-npm link
-```
-
-### Option 2: Direct Usage (Without Global Install)
-
-```bash
-# Clone and install
-git clone <your-repo-url>
-cd caching-proxy
-npm install
-
-# Run directly with node
-node src/index.js --port 3000 --origin https://api.example.com
-```
-
-## 🎯 Usage
-
-### Start the Proxy Server
-
-```bash
-caching-proxy --port <number> --origin <url>
-```
-
-**Example:**
-```bash
-caching-proxy --port 3000 --origin https://dummyjson.com
-```
-
-**Output:**
-```
-🚀 Starting Caching Proxy Server...
-   Port:   3000
-   Origin: https://dummyjson.com
-
-✅ Proxy server is running on http://localhost:3000
-📡 Forwarding requests to: https://dummyjson.com
-
-🎯 Try: curl http://localhost:3000/test
-```
-
-### Make Requests Through the Proxy
-
-```bash
-# First request - fetched from origin (MISS)
-curl http://localhost:3000/products/1
-
-# Second request - served from cache (HIT)
-curl http://localhost:3000/products/1
-
-# Check headers to see cache status
-curl -i http://localhost:3000/products/1 | grep x-cache
-# x-cache: HIT
-```
-
-### Clear the Cache
-
-```bash
-caching-proxy --clear-cache
-```
-
-**Output:**
-```
-🧹 Clearing cache...
-   Current cache size: 5 entries
-
-   Cached entries:
-     1. GET:https://dummyjson.com/products/1
-     2. GET:https://dummyjson.com/products/2
-     3. GET:https://dummyjson.com/products?limit=10
-     ... and 2 more
-
-✅ Cache cleared successfully!
-   5 entries removed
-```
-
-### Get Help
-
-```bash
-caching-proxy --help
-```
-
-### Check Version
-
-```bash
-caching-proxy --version
-```
-
-## ⚙️ Configuration Options
+## ⚙️ Configuration
 
 ### Command-Line Arguments
 
-| Argument | Description | Required | Example |
-|----------|-------------|----------|---------|
-| `--port <number>` | Port for proxy server | Yes* | `--port 3000` |
-| `--origin <url>` | Origin server URL | Yes* | `--origin https://api.com` |
-| `--config <path>` | Load configuration from file | No | `--config proxy.config.json` |
-| `--clear-cache` | Clear all cached entries | No | `--clear-cache` |
-| `--clear-cache-pattern <pattern>` | Clear cache matching URL pattern | No | `--clear-cache-pattern "/api/*"` |
-| `--clear-cache-url <url>` | Clear specific cached URL | No | `--clear-cache-url "https://api.com/products/1"` |
-| `--clear-cache-older-than <time>` | Clear entries older than time | No | `--clear-cache-older-than 1h` |
-| `--dry-run` | Preview deletions without deleting | No | `--clear-cache --dry-run` |
-| `--warm-cache <file>` | Pre-populate cache with URLs from file | No | `--warm-cache urls.txt --origin https://api.com` |
-| `--dashboard <port>` | Start web dashboard on specified port | No | `--dashboard 4000` |
-| `--cache-stats` | Display cache statistics | No | `--cache-stats` |
-| `--cache-list` | List all cached URLs | No | `--cache-list` |
-| `--log-level <level>` | Set log level (debug/info/warn/error) | No | `--log-level debug` |
-| `--help` | Show help message | No | `--help` |
-| `--version` | Show version number | No | `--version` |
+| Argument | Description | Example |
+|----------|-------------|---------|
+| `--port <number>` | Port for proxy server | `--port 3000` |
+| `--origin <url>` | Origin server URL | `--origin https://api.com` |
+| `--config <path>` | Load configuration from file | `--config proxy.config.json` |
+| `--dashboard <port>` | Start web dashboard on specified port | `--dashboard 4000` |
+| `--clear-cache` | Clear all cached entries | `--clear-cache` |
+| `--clear-cache-pattern <pattern>` | Clear cache matching URL pattern | `--clear-cache-pattern "/api/*"` |
+| `--clear-cache-url <url>` | Clear specific cached URL | `--clear-cache-url "https://api.com/data"` |
+| `--clear-cache-older-than <time>` | Clear entries older than time | `--clear-cache-older-than 1h` |
+| `--dry-run` | Preview deletions without deleting | `--clear-cache --dry-run` |
+| `--warm-cache <file>` | Pre-populate cache with URLs from file | `--warm-cache urls.txt` |
+| `--cache-stats` | Display cache statistics | `--cache-stats` |
+| `--cache-list` | List all cached URLs | `--cache-list` |
+| `--log-level <level>` | Set log level (debug/info/warn/error) | `--log-level debug` |
+| `--help` | Show help message | `--help` |
+| `--version` | Show version number | `--version` |
 
-*Required when starting server (not needed for `--clear-cache`)
+### Configuration File Options
 
-### Port Requirements
-
-- Port must be between 1 and 65535
-- Port must not be already in use
-- Common choices: 3000, 8080, 8000
-
-### Origin URL Requirements
-
-- Must be a valid URL with `http://` or `https://` protocol
-- Examples:
-  - ✅ `https://dummyjson.com`
-  - ✅ `http://api.example.com`
-  - ✅ `https://api.github.com`
-  - ❌ `dummyjson.com` (missing protocol)
-  - ❌ `ftp://example.com` (wrong protocol)
-
-### Configuration File
-
-Use `--config <path>` to load settings from a JSON file:
-
-```bash
-caching-proxy --config proxy.config.json
-```
-
-**Example Configuration:**
+**Basic Configuration:**
 ```json
 {
   "server": {
     "port": 3000,
-    "origin": "https://dummyjson.com"
+    "origin": "https://api.example.com",
+    "dashboardPort": 4000
   },
   "cache": {
     "defaultTTL": 300,
     "maxEntries": 1000,
-    "maxSizeMB": 100
+    "maxSizeMB": 100,
+    "cacheKeyHeaders": ["accept-language", "accept-encoding"],
+    "compression": {
+      "enabled": true,
+      "method": "gzip"
+    }
   },
   "logging": {
     "level": "info",
@@ -498,123 +286,99 @@ caching-proxy --config proxy.config.json
 }
 ```
 
-**Cache Configuration Options:**
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `defaultTTL` | number | 300 | Cache TTL in seconds (5 minutes) |
-| `maxEntries` | number | 1000 | Maximum number of cache entries |
-| `maxSizeMB` | number | 100 | Maximum cache size in megabytes |
-| `cacheKeyHeaders` | array | [] | Request headers to include in cache keys (e.g., `["accept-language", "accept-encoding"]`) |
-| `compression.enabled` | boolean | true | Enable/disable response compression |
-| `compression.method` | string | "gzip" | Compression method: `gzip`, `brotli`, or `none` |
-
-When cache limits are reached, the **LRU (Least Recently Used)** eviction policy automatically removes the oldest entries.
-
-**Header-Based Cache Keys:**
-
-By default, the cache key is `METHOD:URL`. When `cacheKeyHeaders` is configured, a hash of the specified header values is appended to the cache key (e.g., `GET:https://api.com/data:a1b2c3d4`). This allows different cache entries for the same URL with different header combinations.
-
-**Configuration accepts ANY header name** - no hardcoding required. Common use cases:
-
-- **Internationalization**: 
-  ```json
-  { "cache": { "cacheKeyHeaders": ["accept-language"] } }
-  ```
-  Cache responses by `accept-language` for multi-language support (en-US, fr-FR, es-ES, etc.)
-
-- **Content Negotiation**: 
-  ```json
-  { "cache": { "cacheKeyHeaders": ["accept-encoding"] } }
-  ```
-  Cache different encodings (gzip, brotli, deflate)
-
-- **Device Differentiation**:
-  ```json
-  { "cache": { "cacheKeyHeaders": ["user-agent"] } }
-  ```
-  Separate cache for mobile, desktop, tablet
-
-- **API Versioning**:
-  ```json
-  { "cache": { "cacheKeyHeaders": ["x-api-version"] } }
-  ```
-  Differentiate cache entries by custom version headers (v1, v2, v3)
-
-- **Multi-Tenant**:
-  ```json
-  { "cache": { "cacheKeyHeaders": ["x-tenant-id"] } }
-  ```
-  Separate cache per tenant/client
-
-- **Multiple Headers**:
-  ```json
-  { "cache": { "cacheKeyHeaders": ["accept-language", "user-agent"] } }
-  ```
-  Combine multiple headers for complex scenarios
-
-**Automatic Vary Header Support**:
-
-The proxy automatically detects and respects the `Vary` header from origin responses. When an origin server sends a `Vary` header, the proxy:
-- Parses the varying headers (e.g., `Vary: Accept-Language`)
-- Merges them with configured `cacheKeyHeaders`
-- Uses the combined list to generate cache keys
-- Stores separate cache entries for different header combinations
-
-Example:
-```bash
-# Origin responds with: Vary: Accept-Encoding
-# Configuration has: cacheKeyHeaders: ["accept-language"]
-
-# Final cache key includes BOTH:
-# - accept-language (from config)
-# - accept-encoding (from Vary header)
-
-Server logs:
-🔀 Vary header detected: accept-encoding
-🔑 Cache key includes headers: accept-encoding, accept-language
+**Advanced Configuration:**
+```json
+{
+  "server": {
+    "port": 3000,
+    "origin": "https://api.example.com",
+    "dashboardPort": 4000,
+    "https": {
+      "enabled": true,
+      "certPath": "./certs/server.crt",
+      "keyPath": "./certs/server.key"
+    }
+  },
+  "cache": {
+    "defaultTTL": 300,
+    "maxEntries": 5000,
+    "maxSizeMB": 500,
+    "cacheKeyHeaders": ["accept-language", "user-agent"],
+    "patternTTL": {
+      "/api/products/*": 600,
+      "/api/users/*": 300,
+      "/api/static/**": 3600
+    }
+  },
+  "security": {
+    "rateLimit": {
+      "enabled": true,
+      "requestsPerMinute": 100,
+      "requestsPerHour": 1000
+    }
+  }
+}
 ```
 
-**Note**: Responses with `Vary: *` are not cached (per HTTP specification).
+### Header-Based Cache Keys
+
+Configure headers to include in cache keys for content negotiation:
+
+```json
+{
+  "cache": {
+    "cacheKeyHeaders": ["accept-language", "accept-encoding"]
+  }
+}
+```
+
+**Common Use Cases:**
+- **Internationalization**: `["accept-language"]` - Cache by language (en-US, fr-FR, etc.)
+- **Content Negotiation**: `["accept-encoding"]` - Cache by encoding (gzip, brotli)
+- **Device Differentiation**: `["user-agent"]` - Separate cache for mobile/desktop
+- **API Versioning**: `["x-api-version"]` - Cache by version (v1, v2, v3)
+- **Multi-Tenant**: `["x-tenant-id"]` - Separate cache per tenant
+
+**Automatic Vary Header Support:**
+
+The proxy automatically respects the `Vary` header from origin responses:
+- Parses varying headers (e.g., `Vary: Accept-Language`)
+- Merges with configured `cacheKeyHeaders`
+- Stores separate cache entries for different header combinations
 
 ## 🗂️ Project Structure
 
 ```
 caching-proxy/
 ├── src/
-│   ├── index.js          # Entry point & CLI setup
-│   ├── cli.js            # Command handlers & validation
-│   ├── server.js         # Proxy server & request forwarding
-│   ├── cache.js          # Cache storage & retrieval (with LRU eviction)
-│   ├── analytics.js      # Cache analytics & statistics
-│   ├── logger.js         # Logging system (access, cache, error, performance)
-│   └── config.js         # Configuration file loader & validator
-├── cache/                # Cache storage directory
-│   ├── cache-data.json   # Cached responses (auto-generated)
-│   └── analytics.json    # Analytics data (auto-generated)
-├── logs/                 # Log files directory
-│   ├── access.log        # Request/response logs
-│   ├── cache.log         # Cache hit/miss/eviction events
-│   ├── error.log         # Error logs
-│   └── performance.log   # Performance metrics
-├── doc/                  # Documentation
-│   ├── PROJECT_PLAN.md   # Development stages & progress
-│   └── CONFIG_DOCUMENTATION.md  # Configuration guide
-├── proxy.config.json     # Example configuration file
+│   ├── index.js          # CLI entry point
+│   ├── cli.js            # Command handlers
+│   ├── server.js         # Proxy server
+│   ├── cache.js          # Cache management
+│   ├── analytics.js      # Analytics & metrics
+│   ├── logger.js         # Logging system
+│   ├── config.js         # Configuration loader
+│   ├── dashboard.js      # Web dashboard server
+│   ├── router.js         # Multi-origin routing
+│   ├── rateLimit.js      # Rate limiting
+│   ├── healthCheck.js    # Health monitoring
+│   ├── versionManager.js # Cache versioning
+│   ├── transformations.js# Request/response transforms
+│   └── pluginManager.js  # Plugin system
+├── public/               # Dashboard UI files
+│   ├── index.html        # Dashboard HTML
+│   ├── dashboard.css     # Dashboard styles
+│   └── dashboard.js      # Dashboard JavaScript
+├── cache/                # Cache storage (auto-generated)
+├── logs/                 # Log files (auto-generated)
+├── docs/                 # Documentation guides
+│   ├── TESTING.md        # Test documentation
+│   ├── CONFIG_DOCUMENTATION.md  # Configuration guide
+│   └── PLUGIN_DEVELOPMENT.md    # Plugin development guide
+├── proxy.config.json     # Example configuration
 ├── package.json          # Dependencies & scripts
-├── README.md             # This file
-└── .gitignore            # Git ignore rules
+└── README.md             # This file
 ```
-
-## 🛠️ Tech Stack
-
-- **Runtime**: Node.js (v14+)
-- **Language**: JavaScript (ES6+)
-- **Dependencies**:
-  - `commander` (v11.1.0) - CLI argument parsing
-  - `http/https` (built-in) - HTTP client/server
-  - `fs` (built-in) - File system operations
-  - `path` (built-in) - Path manipulation
 
 ## 🧪 Testing
 
@@ -632,29 +396,25 @@ curl -i http://localhost:3000/products/1
 curl -i http://localhost:3000/products/1
 # Look for: x-cache: HIT
 
-# Test different endpoints
-curl http://localhost:3000/products/2
-curl http://localhost:3000/users/1
-curl "http://localhost:3000/products?limit=5"
+# Test with query parameters
+curl http://localhost:3000/products?limit=5
 
-# Clear cache
+# Clear cache and verify
 caching-proxy --clear-cache
-
-# Verify cache cleared (should be MISS again)
-curl -i http://localhost:3000/products/1
+curl -i http://localhost:3000/products/1  # Should be MISS again
 ```
 
-### Automated Tests
+### Comprehensive Testing
 
-See [TESTING.md](TESTING.md) for comprehensive test documentation covering:
-- CLI argument parsing (7 tests)
-- HTTP server functionality (4 tests)
-- Request forwarding (7 tests)
-- Caching mechanism (58 tests)
-- Cache headers (4 tests)
-- Clear cache feature (5 tests)
+See [TESTING.md](docs/TESTING.md) for detailed test documentation covering:
+- CLI argument parsing
+- HTTP server functionality
+- Request forwarding
+- Caching mechanisms
+- Cache headers and invalidation
+- Performance benchmarks
 
-**Total: 85+ tests documented**
+**Total: 85+ documented test cases**
 
 ## 🚨 Troubleshooting
 
@@ -667,11 +427,11 @@ See [TESTING.md](TESTING.md) for comprehensive test documentation covering:
 # Option 1: Use a different port
 caching-proxy --port 8080 --origin https://dummyjson.com
 
-# Option 2: Find and kill the process using the port (Windows)
+# Option 2: Kill the process (Windows)
 netstat -ano | findstr :3000
 taskkill /PID <PID> /F
 
-# Option 2: Find and kill the process using the port (Linux/Mac)
+# Option 2: Kill the process (Linux/Mac)
 lsof -ti:3000 | xargs kill -9
 ```
 
@@ -688,39 +448,19 @@ caching-proxy --port 3000 --origin dummyjson.com
 caching-proxy --port 3000 --origin https://dummyjson.com
 ```
 
-### Cache Not Clearing
-
-**Issue:** Cache doesn't clear when running `--clear-cache`
-
-**Solution:** The cache is stored in `cache/cache-data.json`. If the file isn't being deleted:
-```bash
-# Manually delete cache file
-rm cache/cache-data.json   # Linux/Mac
-del cache\cache-data.json  # Windows
-
-# Or delete entire cache directory
-rm -rf cache/              # Linux/Mac
-rmdir /s cache\            # Windows
-```
-
 ### Requests Not Being Cached
 
 **Possible Causes:**
-1. **Non-2xx status code** - Only 200-299 responses are cached
-2. **Different query parameters** - `?page=1` and `?page=2` are cached separately
-3. **Different HTTP methods** - GET and POST to same URL are cached separately
+1. Non-2xx status code - Only 200-299 responses are cached
+2. Authenticated request - Requests with Authorization header are not cached
+3. Origin sends `Cache-Control: no-store` - Respecting HTTP caching directives
+4. Non-GET method - Only GET requests are cached by default
 
 **Check:** Look at server logs for `💾 Cached:` or `⏭️ NOT cached` messages
 
 ### Connection Errors
 
 **Error:** `Bad Gateway: Unable to reach origin server`
-
-**Possible Causes:**
-1. Origin server is down
-2. Network connectivity issues
-3. Firewall blocking outbound connections
-4. Invalid origin URL
 
 **Solution:** Verify origin server is accessible:
 ```bash
@@ -730,84 +470,49 @@ curl https://dummyjson.com/products/1
 ## 📊 Performance Notes
 
 ### Cache Performance
-
 - **Cache HIT**: ~1-5ms response time (instant, no network call)
 - **Cache MISS**: Depends on origin server response time
+- **Speedup**: Typically 50-100x faster for cached responses
 - **Storage**: File-based, persists across server restarts
 - **Memory**: Minimal - cache stored on disk
 
 ### Scalability
-
 - **Concurrent Requests**: Node.js handles multiple simultaneous requests
-- **Cache Size**: Limited only by disk space
+- **Cache Size**: Limited only by configured limits and disk space
 - **File I/O**: Optimized for read/write operations
 
 ### Best Practices
-
 1. **Use for Read-Heavy APIs** - Maximum benefit for GET requests
-2. **Clear Cache Periodically** - Prevent stale data
-3. **Monitor Cache Size** - Check `cache/cache-data.json` file size
-4. **Choose Appropriate Port** - Avoid conflicts with other services
+2. **Configure Appropriate TTL** - Balance freshness vs performance
+3. **Monitor Cache Size** - Use `--cache-stats` regularly
+4. **Set Reasonable Limits** - Based on your server's resources
+5. **Use Dashboard** - Monitor performance in real-time
 
-## 🤝 Contributing
+## 📚 Additional Documentation
 
-Contributions are welcome! This project follows standard contribution guidelines:
+- **[CONFIG_DOCUMENTATION.md](docs/CONFIG_DOCUMENTATION.md)** - Complete configuration reference with environment variable support
+- **[PLUGIN_DEVELOPMENT.md](docs/PLUGIN_DEVELOPMENT.md)** - Plugin system architecture and development guide
+- **[TESTING.md](docs/TESTING.md)** - Comprehensive testing documentation and procedures
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes
-4. Commit your changes (`git commit -m 'Add amazing feature'`)
-5. Push to the branch (`git push origin feature/amazing-feature`)
-6. Open a Pull Request
+## 🛠️ Tech Stack
 
-## 📊 Project Statistics
-
-- **Total Features**: 27 comprehensive stages implemented
-- **Lines of Code**: ~7,000+ (excluding tests and documentation)
-- **Development Time**: 3 months (part-time)
-- **Test Coverage**: 85+ documented test cases
-- **Documentation**: 4 comprehensive guides (README, PROJECT_PLAN, TESTING, CONFIG)
-- **Architecture**: Modular design with 15+ separate modules
-- **Production Ready**: Complete error handling, logging, and monitoring
-
-## 📝 Development & Documentation
-
-This project includes comprehensive documentation:
-
-### [PROJECT_PLAN.md](doc/PROJECT_PLAN.md)
-- 27 detailed implementation stages
-- Complete development roadmap
-- Technical decisions and architecture
-- Progress tracking with test results
-
-### [TESTING.md](docs/TESTING.md)
-- 85+ documented test cases
-- Manual and automated testing procedures
-- Real-world usage examples
-- Performance benchmarks
-
-### [CONFIG_DOCUMENTATION.md](docs/CONFIG_DOCUMENTATION.md)
-- Complete configuration reference
-- Environment variable support
-- Advanced configuration examples
-
-### [PLUGIN_DEVELOPMENT.md](docs/PLUGIN_DEVELOPMENT.md)
-- Plugin system architecture
-- Lifecycle hooks documentation
-- Example plugins with source code
+- **Runtime**: Node.js (v14+)
+- **Language**: JavaScript (ES6+)
+- **Dependencies**:
+  - `commander` (v11.1.0) - CLI argument parsing
+  - Node.js built-in modules: `http`, `https`, `fs`, `path`, `crypto`, `zlib`
 
 ## 💡 What I Learned
 
 Building this project from scratch taught me:
 
-- **HTTP Protocol Deep Dive**: Understanding HTTP methods, headers, status codes, caching headers (ETag, Cache-Control, Vary), and conditional requests
-- **Proxy Architecture**: Request forwarding, header preservation, response streaming, and error handling
-- **Caching Strategies**: LRU eviction, TTL management, cache invalidation patterns, and compression
-- **Node.js Internals**: HTTP/HTTPS modules, streams, file I/O, and event-driven architecture
-- **Production Practices**: Logging, monitoring, health checks, rate limiting, and graceful error handling
-- **API Design**: RESTful API design for the dashboard, JSON data structures, and CORS handling
-- **Web Development**: Real-time dashboard with vanilla JavaScript, CSS animations, and responsive design
-- **Software Architecture**: Modular design, plugin systems, configuration management, and separation of concerns
+- **HTTP Protocol**: Deep understanding of HTTP methods, headers, status codes, caching headers (ETag, Cache-Control, Vary), and conditional requests
+- **Proxy Architecture**: Request forwarding, header preservation, response streaming, and error handling patterns
+- **Caching Strategies**: LRU eviction algorithms, TTL management, cache invalidation patterns, and compression techniques
+- **Node.js**: HTTP/HTTPS modules, streams, file I/O, event-driven architecture, and async programming
+- **Production Practices**: Structured logging, health monitoring, rate limiting, graceful error handling, and deployment considerations
+- **Web Development**: Real-time dashboard with vanilla JavaScript, CSS animations, responsive design, and REST API design
+- **Software Architecture**: Modular design patterns, plugin systems, configuration management, and separation of concerns
 
 ## 🚀 Why This Project?
 
@@ -819,11 +524,30 @@ This caching proxy was built as a comprehensive learning project to understand:
 
 The project evolved from a simple proxy server to a feature-complete caching solution with 27 production-ready features, demonstrating progressive enhancement and iterative development.
 
+## 📊 Project Statistics
+
+- **Total Features**: 27 comprehensive features
+- **Lines of Code**: ~7,000+ (excluding tests and documentation)
+- **Architecture**: Modular design with 15+ separate modules
+- **Test Coverage**: 85+ documented test cases
+- **Production Ready**: Complete error handling, logging, and monitoring
+
+## 🤝 Contributing
+
+Contributions are welcome! To contribute:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Make your changes
+4. Commit your changes (`git commit -m 'Add amazing feature'`)
+5. Push to the branch (`git push origin feature/amazing-feature`)
+6. Open a Pull Request
+
 ## 📄 License
 
 ISC
 
-## 🔗 Related Resources
+## 🔗 Resources
 
 - [HTTP Caching - MDN](https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching)
 - [HTTP Proxy - Wikipedia](https://en.wikipedia.org/wiki/Proxy_server#Web_proxy_servers)
@@ -832,5 +556,4 @@ ISC
 
 ---
 
-**Built from scratch with Node.js** • Comprehensive features • Production-ready • Well-documented
-
+**Built from scratch with Node.js** • Production-ready • Well-documented • Feature-complete

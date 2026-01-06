@@ -3,21 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Caching Proxy Dashboard</title>
+    <meta name="description" content="Real-time monitoring dashboard for caching proxy server">
+    <title>Caching Proxy Dashboard - Real-time Monitoring</title>
     <link rel="stylesheet" href="dashboard.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="dashboard">
         <!-- Header -->
         <header class="header">
             <div class="header-content">
-                <h1>🚀 Caching Proxy Dashboard</h1>
+                <h1 class="glow">🚀 Caching Proxy Dashboard</h1>
                 <div class="header-actions">
                     <span class="status-indicator" id="status">
                         <span class="status-dot"></span>
                         <span class="status-text">Live</span>
                     </span>
-                    <button class="btn btn-small" onclick="refreshDashboard()">
+                    <button class="btn btn-small" onclick="refreshDashboard()" title="Refresh now">
                         🔄 Refresh
                     </button>
                 </div>
@@ -68,27 +72,27 @@
                     <!-- Performance Section -->
                     <section class="section">
                         <div class="section-header">
-                            <h2>📈 Performance</h2>
+                            <h2>📈 Performance Metrics</h2>
                         </div>
                         <div class="section-content">
                             <div class="perf-row">
-                                <span class="perf-label">Cache Hits:</span>
+                                <span class="perf-label">💚 Cache Hits</span>
                                 <span class="perf-value" id="cacheHits">0</span>
                             </div>
                             <div class="perf-row">
-                                <span class="perf-label">Cache Misses:</span>
+                                <span class="perf-label">❌ Cache Misses</span>
                                 <span class="perf-value" id="cacheMisses">0</span>
                             </div>
                             <div class="perf-row">
-                                <span class="perf-label">Speedup:</span>
+                                <span class="perf-label">🚀 Cache Speedup</span>
                                 <span class="perf-value highlight" id="speedup">0x</span>
                             </div>
                             <div class="perf-row">
-                                <span class="perf-label">Hit Time:</span>
+                                <span class="perf-label">⚡ Hit Response Time</span>
                                 <span class="perf-value" id="hitTime">0ms</span>
                             </div>
                             <div class="perf-row">
-                                <span class="perf-label">Miss Time:</span>
+                                <span class="perf-label">🐌 Miss Response Time</span>
                                 <span class="perf-value" id="missTime">0ms</span>
                             </div>
                         </div>
@@ -97,23 +101,23 @@
                     <!-- Bandwidth Section -->
                     <section class="section">
                         <div class="section-header">
-                            <h2>📡 Bandwidth</h2>
+                            <h2>📡 Bandwidth Stats</h2>
                         </div>
                         <div class="section-content">
                             <div class="perf-row">
-                                <span class="perf-label">From Origin:</span>
+                                <span class="perf-label">📥 From Origin</span>
                                 <span class="perf-value" id="bandwidthOrigin">0 MB</span>
                             </div>
                             <div class="perf-row">
-                                <span class="perf-label">Total Served:</span>
+                                <span class="perf-label">📤 Total Served</span>
                                 <span class="perf-value" id="bandwidthServed">0 MB</span>
                             </div>
                             <div class="perf-row">
-                                <span class="perf-label">Saved:</span>
+                                <span class="perf-label">💰 Bandwidth Saved</span>
                                 <span class="perf-value highlight" id="bandwidthSaved">0 MB</span>
                             </div>
                             <div class="perf-row">
-                                <span class="perf-label">Efficiency:</span>
+                                <span class="perf-label">📊 Efficiency</span>
                                 <span class="perf-value" id="bandwidthEfficiency">0%</span>
                             </div>
                         </div>
@@ -122,20 +126,34 @@
                     <!-- Server Info -->
                     <section class="section">
                         <div class="section-header">
-                            <h2>🖥️ Server Info</h2>
+                            <h2>🖥️ Server Information</h2>
                         </div>
                         <div class="section-content">
                             <div class="perf-row">
-                                <span class="perf-label">Port:</span>
+                                <span class="perf-label">🔌 Port</span>
                                 <span class="perf-value" id="serverPort">-</span>
                             </div>
                             <div class="perf-row">
-                                <span class="perf-label">Origin:</span>
-                                <span class="perf-value small" id="serverOrigin">-</span>
+                                <span class="perf-label">🌐 Origin</span>
+                                <span class="perf-value small" id="serverOrigin" title="">-</span>
                             </div>
                             <div class="perf-row">
-                                <span class="perf-label">Uptime:</span>
+                                <span class="perf-label">⏱️ Uptime</span>
                                 <span class="perf-value" id="serverUptime">-</span>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Top URLs -->
+                    <section class="section">
+                        <div class="section-header">
+                            <h2>🔥 Top Requested URLs</h2>
+                        </div>
+                        <div class="section-content">
+                            <div class="top-urls" id="topUrls">
+                                <div class="empty-state-small">
+                                    <span>No data available yet</span>
+                                </div>
                             </div>
                         </div>
                     </section>
@@ -146,37 +164,29 @@
                     <!-- Cache Entries -->
                     <section class="section">
                         <div class="section-header">
-                            <h2>💾 Cached URLs</h2>
+                            <h2>💾 Cached Entries</h2>
                             <div class="section-actions">
                                 <span class="entry-count" id="entryCount">0 entries</span>
-                                <button class="btn btn-small btn-danger" onclick="confirmClearCache()">
+                                <button class="btn btn-small btn-danger" onclick="confirmClearCache()" title="Clear all cached entries">
                                     🗑️ Clear All
                                 </button>
                             </div>
                         </div>
                         <div class="section-content">
                             <div class="search-box">
-                                <input type="text" id="searchCache" placeholder="🔍 Search cached URLs..." onkeyup="filterCache()">
+                                <input 
+                                    type="text" 
+                                    id="searchCache" 
+                                    placeholder="🔍 Search cached URLs..." 
+                                    onkeyup="filterCache()"
+                                    autocomplete="off"
+                                >
                             </div>
                             <div class="cache-list" id="cacheList">
                                 <div class="empty-state">
                                     <div class="empty-icon">📭</div>
-                                    <div class="empty-text">No cached entries yet</div>
-                                    <div class="empty-subtext">Make requests through the proxy to see them here</div>
-                                </div>
-                            </div>
-                        </div>
-                    </section>
-
-                    <!-- Top URLs -->
-                    <section class="section">
-                        <div class="section-header">
-                            <h2>🔥 Top URLs</h2>
-                        </div>
-                        <div class="section-content">
-                            <div class="top-urls" id="topUrls">
-                                <div class="empty-state-small">
-                                    <span>No data yet</span>
+                                    <div class="empty-text">No Cached Entries</div>
+                                    <div class="empty-subtext">Make requests through the proxy to see cached entries appear here in real-time</div>
                                 </div>
                             </div>
                         </div>
@@ -188,8 +198,8 @@
         <!-- Footer -->
         <footer class="footer">
             <div class="footer-content">
-                <span>Last updated: <span id="lastUpdated">-</span></span>
-                <span>Auto-refresh: <span id="autoRefresh" class="status-active">ON</span></span>
+                <span>🕐 Last updated: <span id="lastUpdated">-</span></span>
+                <span>🔄 Auto-refresh: <span id="autoRefresh" class="status-active">ON</span> (every 5s)</span>
             </div>
         </footer>
     </div>
@@ -197,4 +207,3 @@
     <script src="dashboard.js"></script>
 </body>
 </html>
-

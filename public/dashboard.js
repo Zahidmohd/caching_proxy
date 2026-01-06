@@ -49,7 +49,9 @@ async function loadStats() {
         
         // Update server info
         document.getElementById('serverPort').textContent = data.server.port;
-        document.getElementById('serverOrigin').textContent = truncateUrl(data.server.origin);
+        const originElement = document.getElementById('serverOrigin');
+        originElement.textContent = truncateUrl(data.server.origin, 35);
+        originElement.title = data.server.origin; // Full URL on hover
         document.getElementById('serverUptime').textContent = formatUptime(data.server.uptime);
         
         // Update top URLs
