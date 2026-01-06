@@ -28,30 +28,34 @@ async function loadStats() {
         const response = await fetch('/api/stats');
         const data = await response.json();
         
-        // Update stats cards
+        // Update primary metrics
         document.getElementById('totalRequests').textContent = formatNumber(data.requests.total);
         document.getElementById('hitRate').textContent = formatPercent(data.requests.hitRate);
+        document.getElementById('avgLatency').textContent = formatMs(data.performance.avgResponseTime);
         document.getElementById('cacheSize').textContent = formatBytes(data.cache.size);
-        document.getElementById('avgResponse').textContent = formatMs(data.performance.avgResponseTime);
         
-        // Update performance
+        // Update performance stats
         document.getElementById('cacheHits').textContent = formatNumber(data.requests.cacheHits);
         document.getElementById('cacheMisses').textContent = formatNumber(data.requests.cacheMisses);
         document.getElementById('speedup').textContent = formatSpeedup(data.performance.cacheSpeedup);
-        document.getElementById('hitTime').textContent = formatMs(data.performance.avgHitTime);
-        document.getElementById('missTime').textContent = formatMs(data.performance.avgMissTime);
+        document.getElementById('savedBW').textContent = formatBytes(data.bandwidth.saved);
         
-        // Update bandwidth
+        // Update bandwidth stats
         document.getElementById('bandwidthOrigin').textContent = formatBytes(data.bandwidth.totalFromOrigin);
         document.getElementById('bandwidthServed').textContent = formatBytes(data.bandwidth.totalServed);
-        document.getElementById('bandwidthSaved').textContent = formatBytes(data.bandwidth.saved);
         document.getElementById('bandwidthEfficiency').textContent = formatPercent(data.bandwidth.efficiency);
         
         // Update server info
         document.getElementById('serverPort').textContent = data.server.port;
         const originElement = document.getElementById('serverOrigin');
-        originElement.textContent = truncateUrl(data.server.origin, 35);
-        originElement.title = data.server.origin; // Full URL on hover
+        originElement.textContent = data.server.origin;
+        originElement.title = data.server.origin;
+        originElement.style.fontSize = '12px';
+        originElement.style.maxWidth = '300px';
+        originElement.style.overflow = 'hidden';
+        originElement.style.textOverflow = 'ellipsis';
+        originElement.style.whiteSpace = 'nowrap';
+        originElement.style.display = 'inline-block';
         document.getElementById('serverUptime').textContent = formatUptime(data.server.uptime);
         
         // Update top URLs
@@ -78,59 +82,72 @@ async function loadCacheList() {
     }
 }
 
-// Render cache list
+// Render cache list as table
 function renderCacheList(entries) {
-    const cacheList = document.getElementById('cacheList');
+    const container = document.getElementById('cacheTableContainer');
     
     if (entries.length === 0) {
-        cacheList.innerHTML = `
+        container.innerHTML = `
             <div class="empty-state">
-                <div class="empty-icon">📭</div>
-                <div class="empty-text">No cached entries yet</div>
-                <div class="empty-subtext">Make requests through the proxy to see them here</div>
+                <div class="empty-state-text">No cached entries</div>
             </div>
         `;
         return;
     }
     
-    cacheList.innerHTML = entries.map(entry => `
-        <div class="cache-item" data-key="${escapeHtml(entry.key)}">
-            <div class="cache-item-header">
-                <div>
-                    <span class="cache-method">${entry.method}</span>
-                    <span class="cache-url" title="${escapeHtml(entry.url)}">${truncateUrl(entry.url)}</span>
-                </div>
-                <button class="cache-delete" onclick="deleteCacheEntry('${escapeHtml(entry.key)}')">
-                    Delete
-                </button>
-            </div>
-            <div class="cache-meta">
-                <span>📦 ${formatBytes(entry.size)}</span>
-                <span>⏱️ TTL: ${formatDuration(entry.ttl)}</span>
-                <span>📅 ${formatAge(entry.age)} ago</span>
-                <span>✅ ${entry.statusCode}</span>
-            </div>
-        </div>
-    `).join('');
+    container.innerHTML = `
+        <table class="cache-table">
+            <thead>
+                <tr>
+                    <th>Path</th>
+                    <th>Status</th>
+                    <th>Size</th>
+                    <th>TTL</th>
+                    <th>Last Hit</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${entries.map(entry => `
+                    <tr data-key="${escapeHtml(entry.key)}">
+                        <td class="path-cell" title="${escapeHtml(entry.url)}">${extractPath(entry.url)}</td>
+                        <td><span class="status-badge ${entry.ttl > 0 ? 'hit' : 'miss'}">${entry.ttl > 0 ? 'HIT' : 'MISS'}</span></td>
+                        <td class="size-cell">${formatBytes(entry.size)}</td>
+                        <td class="ttl-cell">${formatDuration(entry.ttl)}</td>
+                        <td class="time-cell">${formatAge(entry.age)} ago</td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
 }
 
-// Update top URLs
+// Extract path from URL for cleaner display
+function extractPath(url) {
+    try {
+        const urlObj = new URL(url);
+        return urlObj.pathname + urlObj.search;
+    } catch {
+        return url;
+    }
+}
+
+// Update top URLs - simpler format
 function updateTopUrls(urls) {
     const topUrls = document.getElementById('topUrls');
     
     if (urls.length === 0) {
         topUrls.innerHTML = `
-            <div class="empty-state-small">
-                <span>No data yet</span>
+            <div class="empty-state">
+                <div class="empty-state-text">No data</div>
             </div>
         `;
         return;
     }
     
-    topUrls.innerHTML = urls.slice(0, 5).map((item, index) => `
-        <div class="top-url-item">
-            <div class="top-url-count">${item.count}</div>
-            <div class="top-url-text" title="${escapeHtml(item.url)}">${truncateUrl(item.url)}</div>
+    topUrls.innerHTML = urls.slice(0, 5).map(item => `
+        <div class="stat-row">
+            <span class="stat-label" style="font-size: 12px; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(item.url)}">${extractPath(item.url)}</span>
+            <span class="stat-value">${item.count}</span>
         </div>
     `).join('');
 }
@@ -254,19 +271,26 @@ function formatSpeedup(speedup) {
 }
 
 function formatDuration(ms) {
-    if (ms === undefined || ms === null || ms <= 0) return 'expired';
+    if (ms === undefined || ms === null || ms <= 0) return '—';
     
     const seconds = Math.floor(ms / 1000);
     const minutes = Math.floor(seconds / 60);
     const hours = Math.floor(minutes / 60);
     
-    if (hours > 0) return `${hours}h ${minutes % 60}m`;
-    if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
+    if (hours > 0) return `${hours}h`;
+    if (minutes > 0) return `${minutes}m`;
     return `${seconds}s`;
 }
 
 function formatAge(ms) {
-    return formatDuration(ms);
+    if (ms === undefined || ms === null || ms <= 0) return '—';
+    
+    const seconds = Math.floor(ms / 1000);
+    
+    if (seconds < 60) return `${seconds}s`;
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
+    return `${Math.floor(seconds / 86400)}d`;
 }
 
 function formatUptime(ms) {
