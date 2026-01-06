@@ -562,7 +562,9 @@ function createProxyServer(port, origin, config = null) {
       enabled: config.rateLimit.enabled !== false, // Default to true if present
       requestsPerMinute: config.rateLimit.requestsPerMinute || 60,
       requestsPerHour: config.rateLimit.requestsPerHour || 1000,
-      globalLimit: config.rateLimit.globalLimit || null
+      globalLimit: config.rateLimit.globalLimit || null,
+      whitelist: config.rateLimit.whitelist || [],
+      blacklist: config.rateLimit.blacklist || []
     });
   } else {
     // Default: rate limiting disabled
@@ -581,9 +583,27 @@ function createProxyServer(port, origin, config = null) {
       const rateLimitCheck = checkRateLimit(clientIP);
       
       if (!rateLimitCheck.allowed) {
+        // Handle blacklisted IPs (403 Forbidden)
+        if (rateLimitCheck.isBlacklisted) {
+          console.log(`🚫 Blacklisted IP blocked: ${clientIP}`);
+          
+          res.writeHead(403, {
+            'Content-Type': 'application/json',
+            'X-Request-Id': requestId
+          });
+          
+          res.end(JSON.stringify({
+            error: 'Forbidden',
+            message: 'IP address is blacklisted',
+            ip: clientIP
+          }));
+          
+          return;
+        }
+        
+        // Handle rate limit exceeded (429 Too Many Requests)
         console.log(`⛔ Rate limit exceeded: ${clientIP} - ${rateLimitCheck.limit} (current: ${rateLimitCheck.current})`);
         
-        // Return 429 Too Many Requests
         res.writeHead(429, {
           'Content-Type': 'application/json',
           'Retry-After': rateLimitCheck.retryAfter,

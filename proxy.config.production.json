@@ -43,7 +43,9 @@
     "enabled": true,
     "requestsPerMinute": 100,
     "requestsPerHour": 5000,
-    "globalLimit": 10000
+    "globalLimit": 10000,
+    "whitelist": ["127.0.0.1", "::1"],
+    "blacklist": []
   },
   
   "logging": {

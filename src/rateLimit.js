@@ -13,8 +13,96 @@ let rateLimitConfig = {
   requestsPerMinute: 60,
   requestsPerHour: 1000,
   globalLimit: null, // Global requests per minute (all IPs combined)
-  windowMs: 60000 // Time window for rate limiting (1 minute)
+  windowMs: 60000, // Time window for rate limiting (1 minute)
+  whitelist: [], // IPs that bypass rate limiting
+  blacklist: [] // IPs that are completely blocked (403)
 };
+
+/**
+ * Check if IP matches a CIDR pattern
+ * @param {string} ip - IP address to check
+ * @param {string} cidr - CIDR notation (e.g., "192.168.1.0/24")
+ * @returns {boolean} - True if IP matches CIDR
+ */
+function matchCIDR(ip, cidr) {
+  if (!cidr.includes('/')) {
+    // Not CIDR, just exact match
+    return ip === cidr;
+  }
+  
+  const [range, bits] = cidr.split('/');
+  const mask = ~(2 ** (32 - parseInt(bits)) - 1);
+  
+  const ipNum = ip.split('.').reduce((acc, octet) => (acc << 8) + parseInt(octet), 0) >>> 0;
+  const rangeNum = range.split('.').reduce((acc, octet) => (acc << 8) + parseInt(octet), 0) >>> 0;
+  
+  return (ipNum & mask) === (rangeNum & mask);
+}
+
+/**
+ * Check if IP matches any pattern in a list
+ * @param {string} ip - IP address to check
+ * @param {Array} patterns - Array of IP addresses or CIDR patterns
+ * @returns {boolean} - True if IP matches any pattern
+ */
+function matchesAnyPattern(ip, patterns) {
+  if (!Array.isArray(patterns) || patterns.length === 0) {
+    return false;
+  }
+  
+  // Normalize IPv6 localhost to IPv4
+  const normalizedIP = ip === '::1' ? '127.0.0.1' : ip;
+  
+  for (const pattern of patterns) {
+    // Normalize pattern if it's IPv6 localhost
+    const normalizedPattern = pattern === '::1' ? '127.0.0.1' : pattern;
+    
+    // Exact match (check both original and normalized)
+    if (ip === pattern || normalizedIP === normalizedPattern) {
+      return true;
+    }
+    
+    // CIDR match (only works with IPv4)
+    if (normalizedPattern.includes('/') && !normalizedPattern.includes(':')) {
+      try {
+        if (matchCIDR(normalizedIP, normalizedPattern)) {
+          return true;
+        }
+      } catch (e) {
+        // Invalid CIDR, skip
+        console.warn(`Invalid CIDR pattern: ${normalizedPattern}`);
+      }
+    }
+    
+    // Wildcard match (e.g., "192.168.*")
+    if (normalizedPattern.includes('*')) {
+      const regex = new RegExp('^' + normalizedPattern.replace(/\./g, '\\.').replace(/\*/g, '.*') + '$');
+      if (regex.test(normalizedIP)) {
+        return true;
+      }
+    }
+  }
+  
+  return false;
+}
+
+/**
+ * Check if IP is whitelisted (bypasses rate limiting)
+ * @param {string} ip - IP address to check
+ * @returns {boolean} - True if whitelisted
+ */
+function isWhitelisted(ip) {
+  return matchesAnyPattern(ip, rateLimitConfig.whitelist);
+}
+
+/**
+ * Check if IP is blacklisted (blocked completely)
+ * @param {string} ip - IP address to check
+ * @returns {boolean} - True if blacklisted
+ */
+function isBlacklisted(ip) {
+  return matchesAnyPattern(ip, rateLimitConfig.blacklist);
+}
 
 /**
  * Configure rate limiting settings
@@ -36,12 +124,24 @@ function configureRateLimit(config = {}) {
   if (config.windowMs !== undefined) {
     rateLimitConfig.windowMs = config.windowMs;
   }
+  if (config.whitelist !== undefined) {
+    rateLimitConfig.whitelist = Array.isArray(config.whitelist) ? config.whitelist : [];
+  }
+  if (config.blacklist !== undefined) {
+    rateLimitConfig.blacklist = Array.isArray(config.blacklist) ? config.blacklist : [];
+  }
   
   console.log(`⚙️  Rate limiting: ${rateLimitConfig.enabled ? 'Enabled' : 'Disabled'}`);
   if (rateLimitConfig.enabled) {
     console.log(`   Per-IP Limits: ${rateLimitConfig.requestsPerMinute}/min, ${rateLimitConfig.requestsPerHour}/hour`);
     if (rateLimitConfig.globalLimit) {
       console.log(`   Global Limit: ${rateLimitConfig.globalLimit}/min (across all IPs)`);
+    }
+    if (rateLimitConfig.whitelist.length > 0) {
+      console.log(`   Whitelist: ${rateLimitConfig.whitelist.length} IP(s) bypass rate limiting`);
+    }
+    if (rateLimitConfig.blacklist.length > 0) {
+      console.log(`   Blacklist: ${rateLimitConfig.blacklist.length} IP(s) blocked`);
     }
   }
 }
@@ -110,6 +210,28 @@ function countGlobalRequests(windowStart) {
  * @returns {Object} - { allowed: boolean, retryAfter: number|null, limit: string|null }
  */
 function checkRateLimit(ip) {
+  // Check blacklist first - blocked IPs always get denied
+  if (isBlacklisted(ip)) {
+    return {
+      allowed: false,
+      retryAfter: null,
+      limit: 'IP address is blacklisted',
+      current: null,
+      isBlacklisted: true,
+      statusCode: 403 // Forbidden instead of 429
+    };
+  }
+  
+  // Check whitelist - whitelisted IPs bypass all rate limiting
+  if (isWhitelisted(ip)) {
+    return {
+      allowed: true,
+      retryAfter: null,
+      limit: null,
+      isWhitelisted: true
+    };
+  }
+  
   if (!rateLimitConfig.enabled) {
     return { allowed: true, retryAfter: null, limit: null };
   }
@@ -267,6 +389,8 @@ module.exports = {
   checkRateLimit,
   recordRequest,
   getRateLimitStats,
-  resetRateLimits
+  resetRateLimits,
+  isWhitelisted,
+  isBlacklisted
 };
 

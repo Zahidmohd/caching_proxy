@@ -29,7 +29,9 @@
   "rateLimit": {
     "enabled": false,
     "requestsPerMinute": 1000,
-    "requestsPerHour": 10000
+    "requestsPerHour": 10000,
+    "whitelist": [],
+    "blacklist": []
   },
   
   "logging": {
