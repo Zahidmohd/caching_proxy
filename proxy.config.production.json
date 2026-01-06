@@ -36,13 +36,14 @@
   
   "security": {
     "excludeAuthenticatedRequests": true,
-    "maxRequestSize": "5mb",
-    "rateLimit": {
-      "enabled": true,
-      "windowMs": 60000,
-      "maxRequests": 1000,
-      "perIP": true
-    }
+    "maxRequestSize": "5mb"
+  },
+  
+  "rateLimit": {
+    "enabled": true,
+    "requestsPerMinute": 100,
+    "requestsPerHour": 5000,
+    "globalLimit": null
   },
   
   "logging": {

@@ -8,6 +8,7 @@ const https = require('https');
 const { URL } = require('url');
 const { getCachedResponse, getStaleEntryForValidation, refreshCacheTimestamp, setCachedResponse, getCacheStats, configureCacheLimits, configurePatternTTL, configureCompression, configureCacheKeyHeaders } = require('./cache');
 const { getStats, recordRevalidation, recordBytesFromOrigin, recordBytesServed } = require('./analytics');
+const { configureRateLimit, getClientIP, checkRateLimit, recordRequest } = require('./rateLimit');
 const logger = require('./logger');
 
 // Track server start time for uptime
@@ -555,7 +556,57 @@ function createProxyServer(port, origin, config = null) {
     }
   }
   
+  // Configure rate limiting if config provided
+  if (config && config.rateLimit) {
+    configureRateLimit({
+      enabled: config.rateLimit.enabled !== false, // Default to true if present
+      requestsPerMinute: config.rateLimit.requestsPerMinute || 60,
+      requestsPerHour: config.rateLimit.requestsPerHour || 1000,
+      globalLimit: config.rateLimit.globalLimit || null
+    });
+  } else {
+    // Default: rate limiting disabled
+    configureRateLimit({ enabled: false });
+  }
+  
   const server = http.createServer(async (req, res) => {
+    // Get client IP address
+    const clientIP = getClientIP(req);
+    
+    // Generate request ID for logging
+    const requestId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Check rate limit (skip for health/metrics endpoints)
+    if (!req.url.startsWith('/__')) {
+      const rateLimitCheck = checkRateLimit(clientIP);
+      
+      if (!rateLimitCheck.allowed) {
+        console.log(`⛔ Rate limit exceeded: ${clientIP} - ${rateLimitCheck.limit} (current: ${rateLimitCheck.current})`);
+        
+        // Return 429 Too Many Requests
+        res.writeHead(429, {
+          'Content-Type': 'application/json',
+          'Retry-After': rateLimitCheck.retryAfter,
+          'X-RateLimit-Limit': rateLimitCheck.limit,
+          'X-RateLimit-Current': rateLimitCheck.current,
+          'X-Request-Id': requestId
+        });
+        
+        res.end(JSON.stringify({
+          error: 'Too Many Requests',
+          message: rateLimitCheck.limit,
+          current: rateLimitCheck.current,
+          retryAfter: rateLimitCheck.retryAfter,
+          ip: clientIP
+        }));
+        
+        return;
+      }
+      
+      // Record this request for rate limiting
+      recordRequest(clientIP);
+    }
+    
     // Handle health check endpoint
     if (req.url === '/__health') {
       await handleHealthCheck(req, res, origin);

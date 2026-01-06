@@ -26,6 +26,12 @@
     "excludeAuthenticatedRequests": true
   },
   
+  "rateLimit": {
+    "enabled": false,
+    "requestsPerMinute": 1000,
+    "requestsPerHour": 10000
+  },
+  
   "logging": {
     "enabled": true,
     "level": "debug",
