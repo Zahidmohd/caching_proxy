@@ -60,13 +60,22 @@ function validateOrigin(origin) {
 /**
  * Start the caching proxy server
  * @param {string|number} port - Port to listen on
- * @param {string} origin - Origin server URL
+ * @param {string} origin - Origin server URL (null for multi-origin mode)
  * @param {Object} config - Optional configuration object
  */
 function startServer(port, origin, config = null) {
   // Validate inputs
   const validPort = validatePort(port);
-  const validOrigin = validateOrigin(origin);
+  
+  // Skip origin validation if using multi-origin routing
+  let validOrigin = null;
+  if (origin) {
+    validOrigin = validateOrigin(origin);
+  } else if (config && !config.origins) {
+    console.error('❌ Error: No origin configuration provided');
+    console.error('   Either provide --origin or configure origins in config file');
+    process.exit(1);
+  }
   
   // Display configuration summary if config was used
   if (config) {

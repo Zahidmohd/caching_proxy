@@ -9,6 +9,7 @@ const { URL } = require('url');
 const { getCachedResponse, getStaleEntryForValidation, refreshCacheTimestamp, setCachedResponse, getCacheStats, configureCacheLimits, configurePatternTTL, configureCompression, configureCacheKeyHeaders } = require('./cache');
 const { getStats, recordRevalidation, recordBytesFromOrigin, recordBytesServed } = require('./analytics');
 const { configureRateLimit, getClientIP, checkRateLimit, recordRequest, startCleanup } = require('./rateLimit');
+const { configureRouter, matchOrigin, isMultiOriginEnabled } = require('./router');
 const logger = require('./logger');
 
 // Track server start time for uptime
@@ -578,6 +579,14 @@ function createProxyServer(port, origin, config = null) {
     configureRateLimit({ enabled: false });
   }
   
+  // Configure multi-origin routing if config provided
+  if (config && config.origins) {
+    configureRouter(config.origins);
+  } else if (origin) {
+    // Single origin mode - configure router with default origin
+    configureRouter({ default: origin });
+  }
+  
   const server = http.createServer(async (req, res) => {
     // Get client IP address
     const clientIP = getClientIP(req);
@@ -659,12 +668,41 @@ function createProxyServer(port, origin, config = null) {
     }
     
     // Forward all other requests
-    forwardRequest(req, res, origin);
+    // Use multi-origin routing if enabled
+    if (isMultiOriginEnabled()) {
+      const match = matchOrigin(req.url);
+      
+      if (!match.origin) {
+        // No matching origin found
+        res.writeHead(503, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          error: 'Service Unavailable',
+          message: `No origin configured for path: ${req.url}`
+        }));
+        return;
+      }
+      
+      // Log routing decision for transparency
+      if (match.matched) {
+        console.log(`🗺️  Routing ${req.url} → ${match.origin} (matched: ${match.pattern})`);
+      }
+      
+      forwardRequest(req, res, match.origin);
+    } else {
+      // Single origin mode (backward compatible)
+      forwardRequest(req, res, origin);
+    }
   });
 
   server.listen(port, () => {
     console.log(`✅ Proxy server is running on http://localhost:${port}`);
-    console.log(`📡 Forwarding requests to: ${origin}`);
+    
+    if (isMultiOriginEnabled()) {
+      console.log(`📡 Multi-origin routing enabled`);
+    } else if (origin) {
+      console.log(`📡 Forwarding requests to: ${origin}`);
+    }
+    
     console.log(`\n🎯 Try: curl http://localhost:${port}/test\n`);
   });
 

@@ -77,7 +77,9 @@ if (options.clearCache) {
   });
   
   // Start server with configuration
-  startServer(config.server.port, config.server.origin, config);
+  // Pass null for origin if using multi-origin routing
+  const origin = config.origins ? null : config.server.origin;
+  startServer(config.server.port, origin, config);
 } else {
   // Show help if no valid options provided
   console.error('\n❌ Error: Missing required arguments\n');

@@ -150,9 +150,9 @@ function deepMerge(target, source) {
 function validateConfig(config) {
   const errors = [];
   
-  // Required: server.origin
-  if (!config.server || !config.server.origin) {
-    errors.push('server.origin is required');
+  // Required: server.origin OR origins (multi-origin routing)
+  if (!config.origins && (!config.server || !config.server.origin)) {
+    errors.push('Either server.origin or origins configuration is required');
   }
   
   // Validate: server.port
