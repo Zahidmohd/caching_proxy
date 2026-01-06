@@ -11,6 +11,7 @@ const { getStats, recordRevalidation, recordBytesFromOrigin, recordBytesServed }
 const { configureRateLimit, getClientIP, checkRateLimit, recordRequest, startCleanup } = require('./rateLimit');
 const { configureRouter, matchOrigin, isMultiOriginEnabled, getRoutingTable } = require('./router');
 const { configureHealthCheck, startHealthChecks, getAllHealthStatuses, isHealthCheckEnabled } = require('./healthCheck');
+const { checkVersionChange, clearVersionCache } = require('./versionManager');
 const logger = require('./logger');
 
 // Track server start time for uptime
@@ -522,6 +523,13 @@ function createProxyServer(port, origin, config = null) {
     if (config.cache.version) {
       cacheVersion = config.cache.version;
       console.log(`🏷️  Cache version: ${cacheVersion}`);
+      
+      // Check for version change and auto-clear old cache
+      const versionCheck = checkVersionChange(cacheVersion, clearVersionCache);
+      
+      if (versionCheck.changed && versionCheck.cleared) {
+        console.log(`📊 Cache auto-cleared: ${versionCheck.clearedCount} entries removed`);
+      }
     }
     
     configureCacheLimits({
