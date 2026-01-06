@@ -39,7 +39,10 @@ function configureRateLimit(config = {}) {
   
   console.log(`⚙️  Rate limiting: ${rateLimitConfig.enabled ? 'Enabled' : 'Disabled'}`);
   if (rateLimitConfig.enabled) {
-    console.log(`   Limits: ${rateLimitConfig.requestsPerMinute}/min, ${rateLimitConfig.requestsPerHour}/hour per IP`);
+    console.log(`   Per-IP Limits: ${rateLimitConfig.requestsPerMinute}/min, ${rateLimitConfig.requestsPerHour}/hour`);
+    if (rateLimitConfig.globalLimit) {
+      console.log(`   Global Limit: ${rateLimitConfig.globalLimit}/min (across all IPs)`);
+    }
   }
 }
 
@@ -87,6 +90,21 @@ function getClientIP(req) {
 }
 
 /**
+ * Count total requests across all IPs in a time window
+ * @param {number} windowStart - Timestamp for start of window
+ * @returns {number} - Total request count
+ */
+function countGlobalRequests(windowStart) {
+  let total = 0;
+  
+  for (const timestamps of requestLog.values()) {
+    total += timestamps.filter(ts => ts > windowStart).length;
+  }
+  
+  return total;
+}
+
+/**
  * Check if an IP address is rate limited
  * @param {string} ip - IP address to check
  * @returns {Object} - { allowed: boolean, retryAfter: number|null, limit: string|null }
@@ -99,6 +117,21 @@ function checkRateLimit(ip) {
   const now = Date.now();
   const oneMinuteAgo = now - 60000;
   const oneHourAgo = now - (60 * 60 * 1000);
+  
+  // Check global rate limit first (if configured)
+  if (rateLimitConfig.globalLimit && rateLimitConfig.globalLimit > 0) {
+    const globalRequestsLastMinute = countGlobalRequests(oneMinuteAgo);
+    
+    if (globalRequestsLastMinute >= rateLimitConfig.globalLimit) {
+      return {
+        allowed: false,
+        retryAfter: 60,
+        limit: `${rateLimitConfig.globalLimit} requests per minute (global limit)`,
+        current: globalRequestsLastMinute,
+        isGlobal: true
+      };
+    }
+  }
   
   // Get request history for this IP
   const timestamps = requestLog.get(ip) || [];
@@ -184,6 +217,19 @@ function getRateLimitStats() {
   const now = Date.now();
   const oneMinuteAgo = now - 60000;
   const oneHourAgo = now - (60 * 60 * 1000);
+  
+  // Calculate global statistics
+  const globalRequestsLastMinute = countGlobalRequests(oneMinuteAgo);
+  const globalRequestsLastHour = countGlobalRequests(oneHourAgo);
+  
+  stats.global = {
+    requestsLastMinute: globalRequestsLastMinute,
+    requestsLastHour: globalRequestsLastHour,
+    limitPerMinute: rateLimitConfig.globalLimit,
+    utilizationPercent: rateLimitConfig.globalLimit 
+      ? ((globalRequestsLastMinute / rateLimitConfig.globalLimit) * 100).toFixed(2)
+      : null
+  };
   
   // Collect stats for each IP
   for (const [ip, timestamps] of requestLog.entries()) {

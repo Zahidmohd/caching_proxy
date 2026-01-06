@@ -43,7 +43,7 @@
     "enabled": true,
     "requestsPerMinute": 100,
     "requestsPerHour": 5000,
-    "globalLimit": null
+    "globalLimit": 10000
   },
   
   "logging": {
