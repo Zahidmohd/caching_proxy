@@ -17,8 +17,9 @@ const logger = require('./logger');
 // Track server start time for uptime
 const serverStartTime = Date.now();
 
-// Track cache version
+// Track cache version and config
 let cacheVersion = null;
+let serverConfig = null;
 
 /**
  * Format uptime duration in human-readable format
@@ -304,8 +305,19 @@ function forwardRequest(req, res, origin) {
   // Track request start time for performance metrics
   const startTime = Date.now();
   
+  // Determine version to use (from header or default)
+  let requestVersion = cacheVersion;
+  if (serverConfig && serverConfig.cache?.versioning?.allowVersionHeader) {
+    const versionHeader = serverConfig.cache.versioning.versionHeader || 'X-API-Version';
+    const headerVersion = req.headers[versionHeader.toLowerCase()];
+    if (headerVersion) {
+      requestVersion = headerVersion;
+      console.log(`🔀 Using version from header: ${requestVersion}`);
+    }
+  }
+  
   // ✅ Check cache first
-  const cached = getCachedResponse(req.method, fullUrl, startTime, requestId, req.headers, origin, cacheVersion);
+  const cached = getCachedResponse(req.method, fullUrl, startTime, requestId, req.headers, origin, requestVersion);
   
   if (cached) {
     // Cache HIT - serve from cache
@@ -345,7 +357,7 @@ function forwardRequest(req, res, origin) {
   console.log(`📤 ${req.method} ${targetUrl.pathname}${targetUrl.search}`);
   
   // Check for stale cache entry with validation headers (ETag/Last-Modified)
-  const staleEntry = getStaleEntryForValidation(req.method, fullUrl, req.headers, origin, cacheVersion);
+  const staleEntry = getStaleEntryForValidation(req.method, fullUrl, req.headers, origin, requestVersion);
   
   // Choose http or https based on origin protocol
   const client = originUrl.protocol === 'https:' ? https : http;
@@ -389,10 +401,10 @@ function forwardRequest(req, res, origin) {
       const cacheControl = proxyRes.headers['cache-control'];
       
       // Refresh cache timestamp to extend TTL
-      refreshCacheTimestamp(req.method, fullUrl, req.headers, origin, cacheVersion, null, cacheControl);
+      refreshCacheTimestamp(req.method, fullUrl, req.headers, origin, requestVersion, null, cacheControl);
       
       // Get the cached content (now with refreshed timestamp)
-      const freshContent = getCachedResponse(req.method, fullUrl, startTime, requestId, req.headers, origin, cacheVersion);
+      const freshContent = getCachedResponse(req.method, fullUrl, startTime, requestId, req.headers, origin, requestVersion);
       
       if (freshContent) {
         // Calculate response time
@@ -493,7 +505,7 @@ function forwardRequest(req, res, origin) {
         statusCode: proxyRes.statusCode,
         headers: proxyRes.headers, // Store original headers (without X-Cache)
         body: responseBody
-      }, hasAuth, cacheControl, requestId, req.headers, origin, cacheVersion);
+      }, hasAuth, cacheControl, requestId, req.headers, origin, requestVersion);
     });
   });
   
@@ -517,6 +529,9 @@ function forwardRequest(req, res, origin) {
  * @returns {http.Server} - HTTP server instance
  */
 function createProxyServer(port, origin, config = null) {
+  // Store config for use in request handlers
+  serverConfig = config;
+  
   // Configure cache limits if config provided
   if (config && config.cache) {
     // Set cache version if provided
@@ -524,11 +539,32 @@ function createProxyServer(port, origin, config = null) {
       cacheVersion = config.cache.version;
       console.log(`🏷️  Cache version: ${cacheVersion}`);
       
-      // Check for version change and auto-clear old cache
-      const versionCheck = checkVersionChange(cacheVersion, clearVersionCache);
+      // Get versioning options
+      const versioningOptions = {
+        autoClear: config.cache.versioning?.autoClear !== false,
+        maxVersions: config.cache.versioning?.maxVersions || null
+      };
       
-      if (versionCheck.changed && versionCheck.cleared) {
-        console.log(`📊 Cache auto-cleared: ${versionCheck.clearedCount} entries removed`);
+      // Check for version change
+      const versionCheck = checkVersionChange(cacheVersion, clearVersionCache, versioningOptions);
+      
+      if (versionCheck.changed) {
+        if (versionCheck.cleared) {
+          console.log(`📊 Cache auto-cleared: ${versionCheck.clearedCount} entries removed`);
+        } else {
+          console.log(`📊 Multi-version mode: Old cache preserved`);
+        }
+      }
+      
+      // Display versioning configuration
+      if (config.cache.versioning?.enabled) {
+        console.log(`🔀 Multi-version support: Enabled`);
+        if (config.cache.versioning.allowVersionHeader) {
+          console.log(`   Version header: ${config.cache.versioning.versionHeader}`);
+        }
+        if (config.cache.versioning.maxVersions) {
+          console.log(`   Max versions: ${config.cache.versioning.maxVersions}`);
+        }
       }
     }
     

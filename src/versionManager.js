@@ -62,9 +62,11 @@ function saveVersion(version, cacheCleared = false) {
  * Check if version has changed and handle cache clearing
  * @param {string} currentVersion - Current cache version
  * @param {Function} clearCacheCallback - Function to call to clear cache
+ * @param {Object} options - { autoClear: boolean, maxVersions: number }
  * @returns {Object} - { changed: boolean, oldVersion: string|null, cleared: boolean }
  */
-function checkVersionChange(currentVersion, clearCacheCallback) {
+function checkVersionChange(currentVersion, clearCacheCallback, options = {}) {
+  const { autoClear = true, maxVersions = null } = options;
   const storedVersion = loadStoredVersion();
   
   // If no stored version, this is the first run
@@ -90,21 +92,43 @@ function checkVersionChange(currentVersion, clearCacheCallback) {
     };
   }
   
-  // Version has changed - clear cache
+  // Version has changed
   console.log(`\n🔄 Version changed: ${storedVersion.version} → ${currentVersion || 'none'}`);
-  console.log(`🗑️  Auto-clearing old cache entries...`);
   
   let cleared = false;
   let clearedCount = 0;
   
-  if (clearCacheCallback && typeof clearCacheCallback === 'function') {
+  // Only auto-clear if enabled
+  if (autoClear) {
+    console.log(`🗑️  Auto-clearing old cache entries...`);
+    
+    if (clearCacheCallback && typeof clearCacheCallback === 'function') {
+      try {
+        const result = clearCacheCallback(storedVersion.version);
+        cleared = true;
+        clearedCount = result.cleared || 0;
+        console.log(`✅ Cleared ${clearedCount} cache entries from version ${storedVersion.version}`);
+      } catch (error) {
+        console.error(`❌ Error clearing cache: ${error.message}`);
+      }
+    }
+  } else {
+    console.log(`ℹ️  Auto-clear disabled - keeping old cache entries`);
+    console.log(`💡 Multiple versions will coexist in cache`);
+  }
+  
+  // Check version count limit if specified
+  if (maxVersions && maxVersions > 0 && !autoClear) {
     try {
-      const result = clearCacheCallback(storedVersion.version);
-      cleared = true;
-      clearedCount = result.cleared || 0;
-      console.log(`✅ Cleared ${clearedCount} cache entries from version ${storedVersion.version}`);
+      const versionCount = countCacheVersions();
+      if (versionCount > maxVersions) {
+        console.log(`⚠️  Cache has ${versionCount} versions, limit is ${maxVersions}`);
+        console.log(`🗑️  Removing oldest versions...`);
+        const removed = removeOldestVersions(maxVersions);
+        console.log(`✅ Removed ${removed.count} entries from ${removed.versions.length} old version(s)`);
+      }
     } catch (error) {
-      console.error(`❌ Error clearing cache: ${error.message}`);
+      console.error(`❌ Error checking version limit: ${error.message}`);
     }
   }
   
@@ -184,11 +208,130 @@ function getCurrentVersionInfo() {
   return loadStoredVersion();
 }
 
+/**
+ * Count how many different versions exist in cache
+ * @returns {number} - Number of unique versions
+ */
+function countCacheVersions() {
+  try {
+    const fs = require('fs');
+    const CACHE_FILE = path.join(CACHE_DIR, 'cache-data.json');
+    
+    if (!fs.existsSync(CACHE_FILE)) {
+      return 0;
+    }
+    
+    const data = fs.readFileSync(CACHE_FILE, 'utf8');
+    const cache = JSON.parse(data);
+    
+    const versions = new Set();
+    
+    for (const key of Object.keys(cache)) {
+      // Extract version from key (format: VERSION:ORIGIN_HASH:METHOD:URL)
+      const versionMatch = key.match(/^([^:]+):/);
+      if (versionMatch) {
+        versions.add(versionMatch[1]);
+      }
+    }
+    
+    return versions.size;
+  } catch (error) {
+    console.error(`❌ Error counting cache versions: ${error.message}`);
+    return 0;
+  }
+}
+
+/**
+ * Get all versions in cache with their entry counts
+ * @returns {Array} - Array of { version, count, oldestEntry, newestEntry }
+ */
+function getCacheVersions() {
+  try {
+    const fs = require('fs');
+    const CACHE_FILE = path.join(CACHE_DIR, 'cache-data.json');
+    
+    if (!fs.existsSync(CACHE_FILE)) {
+      return [];
+    }
+    
+    const data = fs.readFileSync(CACHE_FILE, 'utf8');
+    const cache = JSON.parse(data);
+    
+    const versionMap = new Map();
+    
+    for (const [key, entry] of Object.entries(cache)) {
+      // Extract version from key
+      const versionMatch = key.match(/^([^:]+):/);
+      if (versionMatch) {
+        const version = versionMatch[1];
+        
+        if (!versionMap.has(version)) {
+          versionMap.set(version, {
+            version: version,
+            count: 0,
+            oldestEntry: entry.cachedAt,
+            newestEntry: entry.cachedAt
+          });
+        }
+        
+        const versionInfo = versionMap.get(version);
+        versionInfo.count++;
+        versionInfo.oldestEntry = Math.min(versionInfo.oldestEntry, entry.cachedAt);
+        versionInfo.newestEntry = Math.max(versionInfo.newestEntry, entry.cachedAt);
+      }
+    }
+    
+    // Sort by oldest entry (oldest versions first)
+    return Array.from(versionMap.values()).sort((a, b) => a.oldestEntry - b.oldestEntry);
+  } catch (error) {
+    console.error(`❌ Error getting cache versions: ${error.message}`);
+    return [];
+  }
+}
+
+/**
+ * Remove oldest versions to stay within limit
+ * @param {number} maxVersions - Maximum number of versions to keep
+ * @returns {Object} - { count: number, versions: Array<string> }
+ */
+function removeOldestVersions(maxVersions) {
+  try {
+    const versions = getCacheVersions();
+    
+    if (versions.length <= maxVersions) {
+      return { count: 0, versions: [] };
+    }
+    
+    // Calculate how many versions to remove
+    const versionsToRemove = versions.slice(0, versions.length - maxVersions);
+    
+    let totalRemoved = 0;
+    const removedVersions = [];
+    
+    for (const versionInfo of versionsToRemove) {
+      const result = clearVersionCache(versionInfo.version);
+      totalRemoved += result.cleared;
+      removedVersions.push(versionInfo.version);
+    }
+    
+    return {
+      count: totalRemoved,
+      versions: removedVersions
+    };
+  } catch (error) {
+    console.error(`❌ Error removing oldest versions: ${error.message}`);
+    return { count: 0, versions: [] };
+  }
+}
+
 module.exports = {
   checkVersionChange,
   clearVersionCache,
   getCurrentVersionInfo,
   saveVersion,
-  loadStoredVersion
+  loadStoredVersion,
+  countCacheVersions,
+  getCacheVersions,
+  removeOldestVersions
 };
 

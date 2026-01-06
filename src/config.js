@@ -20,7 +20,15 @@ const DEFAULT_CONFIG = {
     maxEntries: 1000,
     maxSizeMB: 100,
     strategy: 'lru',
-    storageDir: './cache'
+    storageDir: './cache',
+    version: null,
+    versioning: {
+      enabled: false,
+      autoClear: true,
+      maxVersions: 3,
+      allowVersionHeader: false,
+      versionHeader: 'X-API-Version'
+    }
   },
   security: {
     excludeAuthenticatedRequests: true,
