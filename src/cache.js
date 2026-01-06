@@ -45,6 +45,9 @@ const DEFAULT_CACHE_TTL = 5 * 60 * 1000;
 let MAX_CACHE_ENTRIES = 1000; // Maximum number of cache entries
 let MAX_CACHE_SIZE_MB = 100;   // Maximum cache size in MB
 
+// Compression configuration
+let COMPRESSION_METHOD = 'gzip'; // Options: 'gzip', 'brotli', 'none'
+
 // Pattern-based TTL configuration
 // Format: { "/pattern/*": ttlInSeconds, ... }
 let PATTERN_TTL_CONFIG = {};
@@ -61,6 +64,20 @@ function configureCacheLimits(options = {}) {
   }
   if (options.maxSizeMB !== undefined) {
     MAX_CACHE_SIZE_MB = options.maxSizeMB;
+  }
+}
+
+/**
+ * Configure compression method
+ * @param {string} method - Compression method: 'gzip', 'brotli', or 'none'
+ */
+function configureCompression(method = 'gzip') {
+  const validMethods = ['gzip', 'brotli', 'none'];
+  if (validMethods.includes(method)) {
+    COMPRESSION_METHOD = method;
+  } else {
+    console.warn(`⚠️  Invalid compression method: ${method}. Using default (gzip)`);
+    COMPRESSION_METHOD = 'gzip';
   }
 }
 
@@ -346,13 +363,23 @@ function getCachedResponse(method, url, startTime = Date.now(), requestId = null
     
     // Decompress the body if it was compressed
     let decompressedBody = cached.body;
-    if (cached.compressed && cached.body) {
+    
+    // Determine compression method (support old 'compressed' boolean for backward compatibility)
+    const compressionMethod = cached.compression || (cached.compressed ? 'gzip' : 'none');
+    
+    if (compressionMethod !== 'none' && cached.body) {
       try {
-        // Decompress gzip data from base64
         const compressedBuffer = Buffer.from(cached.body, 'base64');
-        decompressedBody = zlib.gunzipSync(compressedBuffer).toString('utf8');
+        
+        if (compressionMethod === 'brotli') {
+          // Decompress brotli
+          decompressedBody = zlib.brotliDecompressSync(compressedBuffer).toString('utf8');
+        } else {
+          // Default to gzip decompression
+          decompressedBody = zlib.gunzipSync(compressedBuffer).toString('utf8');
+        }
       } catch (error) {
-        console.log(`⚠️  Decompression failed for ${key}: ${error.message}`);
+        console.log(`⚠️  ${compressionMethod} decompression failed for ${key}: ${error.message}`);
         // Fall back to returning as-is
         decompressedBody = cached.body;
       }
@@ -563,20 +590,30 @@ function setCachedResponse(method, url, responseData, hasAuth = false, cacheCont
   // Determine TTL based on priority: Cache-Control > Custom Config > Default
   const ttl = determineTTL(url, cacheControl);
   
-  // Compress the response body using gzip before storing
+  // Compress the response body before storing
   let compressedBody = responseData.body;
-  let isCompressed = false;
+  let compressionUsed = 'none';
   
-  if (responseData.body) {
+  if (responseData.body && COMPRESSION_METHOD !== 'none') {
     try {
-      // Compress the body using gzip
-      compressedBody = zlib.gzipSync(responseData.body).toString('base64');
-      isCompressed = true;
+      let compressedBuffer;
+      
+      if (COMPRESSION_METHOD === 'brotli') {
+        // Compress using brotli
+        compressedBuffer = zlib.brotliCompressSync(responseData.body);
+        compressionUsed = 'brotli';
+      } else {
+        // Default to gzip
+        compressedBuffer = zlib.gzipSync(responseData.body);
+        compressionUsed = 'gzip';
+      }
+      
+      compressedBody = compressedBuffer.toString('base64');
     } catch (error) {
-      console.log(`⚠️  Compression failed for ${key}: ${error.message}`);
+      console.log(`⚠️  ${COMPRESSION_METHOD} compression failed for ${key}: ${error.message}`);
       // Fall back to storing uncompressed
       compressedBody = responseData.body;
-      isCompressed = false;
+      compressionUsed = 'none';
     }
   }
   
@@ -586,7 +623,7 @@ function setCachedResponse(method, url, responseData, hasAuth = false, cacheCont
     statusCode: responseData.statusCode,
     headers: responseData.headers,
     body: compressedBody,
-    compressed: isCompressed, // Flag to indicate if body is compressed
+    compression: compressionUsed, // Compression method used: 'gzip', 'brotli', or 'none'
     cachedAt: now,
     expiresAt: now + ttl,
     lastAccessTime: now // Track for LRU eviction
@@ -882,6 +919,7 @@ module.exports = {
   getCacheStats,
   shouldCacheResponse,
   configureCacheLimits,
+  configureCompression,
   configurePatternTTL,
   matchPattern,
   getTTLForURL,
