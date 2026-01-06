@@ -14,6 +14,7 @@ const { configureRouter, matchOrigin, isMultiOriginEnabled, getRoutingTable } = 
 const { configureHealthCheck, startHealthChecks, getAllHealthStatuses, isHealthCheckEnabled } = require('./healthCheck');
 const { checkVersionChange, clearVersionCache } = require('./versionManager');
 const { configureTransformations, applyBeforeRequest, applyAfterResponse, isTransformationEnabled } = require('./transformations');
+const { initializePlugins, executeHook, isPluginSystemEnabled, getPluginStats } = require('./pluginManager');
 const logger = require('./logger');
 
 // Track server start time for uptime
@@ -307,6 +308,32 @@ async function forwardRequest(req, res, origin) {
   // Track request start time for performance metrics
   const startTime = Date.now();
   
+  // Get client IP for plugins
+  const clientIP = req.headers['x-forwarded-for'] || 
+                   req.headers['x-real-ip'] || 
+                   req.socket.remoteAddress || 
+                   'unknown';
+  
+  // Execute beforeRequest plugin hook
+  let pluginContext = {
+    request: {
+      method: req.method,
+      url: fullUrl,
+      headers: req.headers,
+      body: null // We don't buffer body for GET requests
+    },
+    requestId,
+    clientIP
+  };
+  
+  if (isPluginSystemEnabled()) {
+    pluginContext = await executeHook('beforeRequest', pluginContext);
+    // Apply any header modifications from plugins
+    if (pluginContext.request && pluginContext.request.headers) {
+      req.headers = pluginContext.request.headers;
+    }
+  }
+  
   // Determine version to use (from header or default)
   let requestVersion = cacheVersion;
   if (serverConfig && serverConfig.cache?.versioning?.allowVersionHeader) {
@@ -325,6 +352,18 @@ async function forwardRequest(req, res, origin) {
     // Cache HIT - serve from cache
     const responseTime = Date.now() - startTime;
     console.log(`✨ Serving from cache: ${req.method} ${targetUrl.pathname}${targetUrl.search}`);
+    
+    // Execute onCacheHit plugin hook
+    if (isPluginSystemEnabled()) {
+      const cacheKey = `${req.method}:${fullUrl}`;
+      await executeHook('onCacheHit', {
+        cacheKey,
+        cachedEntry: cached,
+        requestId,
+        url: fullUrl,
+        method: req.method
+      });
+    }
     
     // Add X-Cache: HIT header
     const cachedHeaders = {
@@ -349,6 +388,25 @@ async function forwardRequest(req, res, origin) {
       recordBytesServed(bodySize, origin);
     }
     
+    // Execute afterRequest plugin hook for cache HIT
+    if (isPluginSystemEnabled()) {
+      await executeHook('afterRequest', {
+        request: {
+          method: req.method,
+          url: fullUrl,
+          headers: req.headers
+        },
+        response: {
+          statusCode: cached.statusCode,
+          headers: cachedHeaders,
+          body: cached.body
+        },
+        requestId,
+        responseTime,
+        cacheStatus: 'HIT'
+      });
+    }
+    
     // Send cached response to client
     res.writeHead(cached.statusCode, cachedHeaders);
     res.end(cached.body);
@@ -357,6 +415,17 @@ async function forwardRequest(req, res, origin) {
   
   // Cache MISS - forward to origin
   console.log(`📤 ${req.method} ${targetUrl.pathname}${targetUrl.search}`);
+  
+  // Execute onCacheMiss plugin hook
+  if (isPluginSystemEnabled()) {
+    const cacheKey = `${req.method}:${fullUrl}`;
+    await executeHook('onCacheMiss', {
+      cacheKey,
+      requestId,
+      url: fullUrl,
+      method: req.method
+    });
+  }
   
   // Check for stale cache entry with validation headers (ETag/Last-Modified)
   const staleEntry = getStaleEntryForValidation(req.method, fullUrl, req.headers, origin, requestVersion);
@@ -530,6 +599,25 @@ async function forwardRequest(req, res, origin) {
       // Calculate response time
       const responseTime = Date.now() - startTime;
       
+      // Execute afterRequest plugin hook
+      if (isPluginSystemEnabled()) {
+        await executeHook('afterRequest', {
+          request: {
+            method: req.method,
+            url: fullUrl,
+            headers: req.headers
+          },
+          response: {
+            statusCode: finalStatusCode,
+            headers: finalHeaders,
+            body: finalBody
+          },
+          requestId,
+          responseTime,
+          cacheStatus: 'MISS'
+        });
+      }
+      
       // Log access event
       logger.logAccess({
         method: req.method,
@@ -675,6 +763,11 @@ function createProxyServer(port, origin, config = null) {
     configureTransformations(config.transformations);
   }
   
+  // Initialize plugins before preloading cache
+  if (config && config.plugins) {
+    initializePlugins(config);
+  }
+  
   // Preload cache on startup (unless disabled)
   const shouldPreload = config?.cache?.preload !== false;
   if (shouldPreload) {
@@ -751,8 +844,9 @@ function createProxyServer(port, origin, config = null) {
   
   // Request handler function (used by both HTTP and HTTPS)
   const requestHandler = async (req, res, isHttpServer = false) => {
-    // Auto-redirect HTTP to HTTPS if enabled in dual mode
-    if (isHttpServer && config && config.server.https?.redirectToHttps) {
+    try {
+      // Auto-redirect HTTP to HTTPS if enabled in dual mode
+      if (isHttpServer && config && config.server.https?.redirectToHttps) {
       const httpsPort = port;
       const host = req.headers.host ? req.headers.host.split(':')[0] : config.server.host;
       const httpsUrl = `https://${host}:${httpsPort}${req.url}`;
@@ -872,6 +966,34 @@ function createProxyServer(port, origin, config = null) {
       // Single origin mode (backward compatible)
       forwardRequest(req, res, origin);
     }
+    } catch (error) {
+      // Handle any errors in request processing
+      console.error(`❌ Error processing request: ${error.message}`);
+      
+      // Execute onError plugin hook
+      if (isPluginSystemEnabled()) {
+        const requestId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        await executeHook('onError', {
+          error,
+          request: {
+            method: req.method,
+            url: req.url,
+            headers: req.headers
+          },
+          requestId,
+          stage: 'request'
+        });
+      }
+      
+      // Send error response to client
+      if (!res.headersSent) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          error: 'Internal Server Error',
+          message: error.message
+        }));
+      }
+    }
   };
 
   // Create HTTP or HTTPS server based on configuration
@@ -920,13 +1042,26 @@ function createProxyServer(port, origin, config = null) {
     servers.push({ server: httpServer, type: 'HTTP', port: httpPort });
     
     // Start HTTPS server
-    httpsServer.listen(port, () => {
+    httpsServer.listen(port, async () => {
       console.log(`🔒 HTTPS server is running on https://localhost:${port}`);
     });
     
     // Start HTTP server
-    httpServer.listen(httpPort, () => {
+    httpServer.listen(httpPort, async () => {
       console.log(`✅ HTTP server is running on http://localhost:${httpPort}`);
+      
+      // Execute onServerStart plugin hook (only once for dual mode)
+      if (isPluginSystemEnabled()) {
+        await executeHook('onServerStart', {
+          server: httpsServer,
+          httpServer,
+          config: serverConfig,
+          port,
+          httpPort,
+          origin,
+          protocol: 'dual'
+        });
+      }
       
       // Show summary after both servers start
       setTimeout(() => {
@@ -945,9 +1080,20 @@ function createProxyServer(port, origin, config = null) {
     
   } else {
     // Single mode (HTTP or HTTPS only)
-    server.listen(port, () => {
+    server.listen(port, async () => {
       const protocol = httpsEnabled ? 'https' : 'http';
       console.log(`✅ Proxy server is running on ${protocol}://localhost:${port}`);
+      
+      // Execute onServerStart plugin hook
+      if (isPluginSystemEnabled()) {
+        await executeHook('onServerStart', {
+          server,
+          config: serverConfig,
+          port,
+          origin,
+          protocol
+        });
+      }
       
       if (isMultiOriginEnabled()) {
         console.log(`📡 Multi-origin routing enabled`);
