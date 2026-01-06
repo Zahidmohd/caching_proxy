@@ -17,7 +17,8 @@ const DEFAULT_CONFIG = {
     https: {
       enabled: false,
       certPath: null,
-      keyPath: null
+      keyPath: null,
+      redirectToHttps: false // Auto-redirect HTTP to HTTPS in dual mode
     }
   },
   cache: {
@@ -309,6 +310,9 @@ function loadConfig(options = {}) {
   if (cliArgs.httpPort) {
     config.server.httpPort = parseInt(cliArgs.httpPort, 10);
   }
+  if (cliArgs.redirectToHttps !== undefined) {
+    config.server.https.redirectToHttps = cliArgs.redirectToHttps;
+  }
   
   // Validate configuration
   const validation = validateConfig(config);
@@ -341,6 +345,9 @@ function displayConfigSummary(config) {
     console.log(`   🔒 HTTPS:   Enabled`);
     console.log(`   Certificate: ${config.server.https.certPath}`);
     console.log(`   Private Key: ${config.server.https.keyPath}`);
+    if (config.server.https.redirectToHttps) {
+      console.log(`   ↪️  Auto-redirect: HTTP → HTTPS`);
+    }
   } else {
     const protocol = config.server.https?.enabled ? 'https' : 'http';
     console.log(`   Server:    ${protocol}://${config.server.host}:${config.server.port}`);

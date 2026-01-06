@@ -682,7 +682,24 @@ function createProxyServer(port, origin, config = null) {
   }
   
   // Request handler function (used by both HTTP and HTTPS)
-  const requestHandler = async (req, res) => {
+  const requestHandler = async (req, res, isHttpServer = false) => {
+    // Auto-redirect HTTP to HTTPS if enabled in dual mode
+    if (isHttpServer && config && config.server.https?.redirectToHttps) {
+      const httpsPort = port;
+      const host = req.headers.host ? req.headers.host.split(':')[0] : config.server.host;
+      const httpsUrl = `https://${host}:${httpsPort}${req.url}`;
+      
+      console.log(`↪️  Redirecting HTTP → HTTPS: ${req.url}`);
+      
+      res.writeHead(301, {
+        'Location': httpsUrl,
+        'Content-Type': 'text/plain'
+      });
+      
+      res.end(`Redirecting to ${httpsUrl}`);
+      return;
+    }
+    
     // Get client IP address
     const clientIP = getClientIP(req);
     
@@ -818,16 +835,20 @@ function createProxyServer(port, origin, config = null) {
     // Dual mode: Run both HTTP and HTTPS servers
     console.log(`🔀 Dual mode: Starting both HTTP and HTTPS servers`);
     
+    if (config.server.https.redirectToHttps) {
+      console.log(`↪️  HTTP to HTTPS redirect enabled`);
+    }
+    
     // Create HTTPS server
     const httpsOptions = {
       cert: fs.readFileSync(config.server.https.certPath),
       key: fs.readFileSync(config.server.https.keyPath)
     };
-    httpsServer = https.createServer(httpsOptions, requestHandler);
+    httpsServer = https.createServer(httpsOptions, (req, res) => requestHandler(req, res, false));
     servers.push({ server: httpsServer, type: 'HTTPS', port: port });
     
-    // Create HTTP server
-    httpServer = http.createServer(requestHandler);
+    // Create HTTP server (with redirect flag)
+    httpServer = http.createServer((req, res) => requestHandler(req, res, true));
     servers.push({ server: httpServer, type: 'HTTP', port: httpPort });
     
     // Start HTTPS server
