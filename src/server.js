@@ -7,7 +7,7 @@ const http = require('http');
 const https = require('https');
 const { URL } = require('url');
 const { getCachedResponse, getStaleEntryForValidation, refreshCacheTimestamp, setCachedResponse, getCacheStats, configureCacheLimits, configurePatternTTL, configureCompression, configureCacheKeyHeaders } = require('./cache');
-const { getStats } = require('./analytics');
+const { getStats, recordRevalidation, recordBytesFromOrigin, recordBytesServed } = require('./analytics');
 const logger = require('./logger');
 
 // Track server start time for uptime
@@ -321,6 +321,12 @@ function forwardRequest(req, res, origin) {
       requestId
     });
     
+    // Track bandwidth served
+    const bodySize = cached.body ? Buffer.byteLength(cached.body, 'utf8') : 0;
+    if (bodySize > 0) {
+      recordBytesServed(bodySize);
+    }
+    
     // Send cached response to client
     res.writeHead(cached.statusCode, cachedHeaders);
     res.end(cached.body);
@@ -407,6 +413,10 @@ function forwardRequest(req, res, origin) {
           requestId
         });
         
+        // Record revalidation and bandwidth savings in analytics
+        recordRevalidation(fullUrl, responseTime, savedBytes);
+        recordBytesServed(savedBytes);
+        
         console.log(`📊 Bandwidth saved: ${savedBytes} bytes (${(savedBytes / 1024).toFixed(2)} KB)`);
       } else {
         // Fallback: if we can't get cached content, return 304 to client
@@ -462,6 +472,13 @@ function forwardRequest(req, res, origin) {
       
       // Check Cache-Control header from origin server
       const cacheControl = proxyRes.headers['cache-control'];
+      
+      // Track bandwidth usage
+      const bodySize = responseBody ? Buffer.byteLength(responseBody, 'utf8') : 0;
+      if (bodySize > 0) {
+        recordBytesFromOrigin(bodySize);
+        recordBytesServed(bodySize);
+      }
       
       // Store in cache (only if successful 2xx response and not authenticated)
       setCachedResponse(req.method, fullUrl, {

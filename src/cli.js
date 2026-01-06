@@ -296,6 +296,9 @@ function showCacheStats() {
   console.log(`   Total Requests:   ${stats.totalRequests.toLocaleString()}`);
   console.log(`   Cache Hits:       ${stats.totalHits.toLocaleString()} (${stats.hitRate}%)`);
   console.log(`   Cache Misses:     ${stats.totalMisses.toLocaleString()} (${stats.missRate}%)`);
+  if (stats.totalRevalidations > 0) {
+    console.log(`   Revalidations:    ${stats.totalRevalidations.toLocaleString()} (304 Not Modified) 🔄`);
+  }
   console.log(`   Hit Rate:         ${stats.hitRate}% 🎯`);
   console.log(`   Uptime:           ${stats.uptime}`);
   
@@ -405,6 +408,27 @@ function showCacheStats() {
       if (stats.compression.methodBreakdown.none > 0) {
         console.log(`     • None:   ${stats.compression.methodBreakdown.none} entries`);
       }
+    }
+  }
+  
+  // Bandwidth Statistics
+  if (stats.bandwidth) {
+    console.log(`\n📡 Bandwidth Statistics:`);
+    console.log(`   Total Downloaded:     ${stats.bandwidth.totalBytesFromOriginStr} (from origin)`);
+    console.log(`   Total Served:         ${stats.bandwidth.totalBytesServedStr} (to clients)`);
+    console.log(`   Total Saved:          ${stats.bandwidth.totalBytesSavedStr} 💰`);
+    
+    if (stats.totalRevalidations > 0) {
+      console.log(`   Saved by 304:         ${stats.bandwidth.bytesSavedBy304Str} 🔄`);
+      console.log(`   Revalidations:        ${stats.totalRevalidations} (${stats.bandwidth.revalidationCount} successful)`);
+      
+      if (stats.performance.revalidationCount > 0) {
+        console.log(`   Avg Revalidation:     ${stats.performance.avgRevalidationTime}ms`);
+      }
+    }
+    
+    if (stats.bandwidth.totalBytesServed > 0 && stats.bandwidth.bandwidthEfficiency > 0) {
+      console.log(`   Bandwidth Efficiency: ${stats.bandwidth.bandwidthEfficiency}% reduction 🎯`);
     }
   }
   
