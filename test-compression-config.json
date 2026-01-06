@@ -1,0 +1,16 @@
+{
+  "server": {
+    "port": 3000,
+    "origin": "https://dummyjson.com"
+  },
+  "cache": {
+    "compression": {
+      "enabled": true,
+      "method": "brotli"
+    }
+  },
+  "logging": {
+    "level": "info"
+  }
+}
+

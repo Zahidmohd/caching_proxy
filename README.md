@@ -7,6 +7,7 @@ A high-performance CLI tool that creates a caching proxy server to speed up your
 - ⚡ **Fast Response Times** - Serve cached responses instantly
 - 💾 **Smart Caching** - Only cache successful (2xx) responses
 - 🔄 **Cache Indicators** - Clear `X-Cache: HIT/MISS` headers
+- 🔑 **Header-Based Cache Keys** - Differentiate cache entries by request headers
 - 🧹 **Easy Management** - Simple `--clear-cache` command
 - 🔥 **Cache Warming** - Pre-populate cache with URLs from file
 - 📦 **File-Based Storage** - Persistent cache across restarts
@@ -135,6 +136,38 @@ caching-proxy --warm-cache warm-urls.txt --origin https://dummyjson.com
 #    Duration:          1.5s
 ```
 
+### Example 7: Header-Based Cache Keys
+
+```bash
+# Create a configuration file with header-based cache keys
+cat > proxy.config.json << EOF
+{
+  "server": {
+    "port": 3000,
+    "origin": "https://api.example.com"
+  },
+  "cache": {
+    "cacheKeyHeaders": ["accept-language", "accept-encoding"]
+  }
+}
+EOF
+
+# Start the proxy
+caching-proxy --config proxy.config.json
+
+# Same URL with different Accept-Language headers creates separate cache entries
+curl -H "Accept-Language: en-US" http://localhost:3000/api/data    # MISS - caches with en-US
+curl -H "Accept-Language: fr-FR" http://localhost:3000/api/data    # MISS - caches with fr-FR
+curl -H "Accept-Language: en-US" http://localhost:3000/api/data    # HIT - serves en-US cached version
+
+# Check cache stats to see both entries
+caching-proxy --cache-stats --config proxy.config.json
+
+# Cache keys include a hash of the header values:
+# GET:https://api.example.com/api/data:a1b2c3d4 (en-US)
+# GET:https://api.example.com/api/data:x9y8z7w6 (fr-FR)
+```
+
 ## 🔧 How It Works
 
 ### Request Flow
@@ -160,6 +193,7 @@ caching-proxy --warm-cache warm-urls.txt --origin https://dummyjson.com
 - ✅ Complete response: status code, headers, and body
 - ✅ With **5-minute TTL** (auto-expires after 300 seconds)
 - ✅ Query parameters are part of the cache key
+- ✅ Optional header-based cache keys for content negotiation
 
 **What Doesn't Get Cached:**
 - ❌ Non-GET methods (POST, PUT, DELETE, PATCH, etc.)
@@ -230,6 +264,7 @@ The cache automatically manages its size to prevent unlimited growth:
   - File-based persistent storage (`cache/cache-data.json`)
   - Method and URL specific caching
   - Query parameter aware
+  - Optional header-based cache keys for content negotiation
 - ✅ **Cache Indicators:**
   - `X-Cache: HIT` - Response served from cache (fast!)
   - `X-Cache: MISS` - Response fetched from origin
@@ -411,8 +446,18 @@ caching-proxy --config proxy.config.json
 | `defaultTTL` | number | 300 | Cache TTL in seconds (5 minutes) |
 | `maxEntries` | number | 1000 | Maximum number of cache entries |
 | `maxSizeMB` | number | 100 | Maximum cache size in megabytes |
+| `cacheKeyHeaders` | array | [] | Request headers to include in cache keys (e.g., `["accept-language", "accept-encoding"]`) |
+| `compression.enabled` | boolean | true | Enable/disable response compression |
+| `compression.method` | string | "gzip" | Compression method: `gzip`, `brotli`, or `none` |
 
 When cache limits are reached, the **LRU (Least Recently Used)** eviction policy automatically removes the oldest entries.
+
+**Header-Based Cache Keys:**
+
+By default, the cache key is `METHOD:URL`. When `cacheKeyHeaders` is configured, a hash of the specified header values is appended to the cache key (e.g., `GET:https://api.com/data:a1b2c3d4`). This allows different cache entries for the same URL with different header combinations, useful for:
+- **Internationalization**: Cache responses by `accept-language` for multi-language support
+- **Content Negotiation**: Cache different formats based on `accept` or `accept-encoding` headers
+- **API Versioning**: Differentiate cache entries by custom version headers
 
 ## 🗂️ Project Structure
 

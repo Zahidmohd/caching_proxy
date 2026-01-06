@@ -12,6 +12,10 @@
     "enabled": true,
     "defaultTTL": 60,
     "maxEntries": 100,
+    "compression": {
+      "enabled": true,
+      "method": "gzip"
+    },
     "customTTL": {
       "/products/*": 120,
       "/users/*": 30

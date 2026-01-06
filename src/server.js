@@ -6,7 +6,7 @@
 const http = require('http');
 const https = require('https');
 const { URL } = require('url');
-const { getCachedResponse, setCachedResponse, getCacheStats, configureCacheLimits, configurePatternTTL } = require('./cache');
+const { getCachedResponse, setCachedResponse, getCacheStats, configureCacheLimits, configurePatternTTL, configureCompression, configureCacheKeyHeaders } = require('./cache');
 const { getStats } = require('./analytics');
 const logger = require('./logger');
 
@@ -297,7 +297,7 @@ function forwardRequest(req, res, origin) {
   const startTime = Date.now();
   
   // ✅ Check cache first
-  const cached = getCachedResponse(req.method, fullUrl, startTime, requestId);
+  const cached = getCachedResponse(req.method, fullUrl, startTime, requestId, req.headers);
   
   if (cached) {
     // Cache HIT - serve from cache
@@ -395,7 +395,7 @@ function forwardRequest(req, res, origin) {
         statusCode: proxyRes.statusCode,
         headers: proxyRes.headers, // Store original headers (without X-Cache)
         body: responseBody
-      }, hasAuth, cacheControl, requestId);
+      }, hasAuth, cacheControl, requestId, req.headers);
     });
   });
   
@@ -430,6 +430,26 @@ function createProxyServer(port, origin, config = null) {
     // Configure pattern-based TTL if provided
     if (config.cache.customTTL) {
       configurePatternTTL(config.cache.customTTL);
+    }
+    
+    // Configure compression if provided
+    if (config.cache.compression) {
+      if (config.cache.compression.enabled === false) {
+        configureCompression('none');
+        console.log(`🗜️  Compression: Disabled`);
+      } else {
+        const method = config.cache.compression.method || 'gzip';
+        configureCompression(method);
+        console.log(`🗜️  Compression: ${method}`);
+      }
+    }
+    
+    // Configure cache key headers if provided
+    if (config.cache.cacheKeyHeaders && Array.isArray(config.cache.cacheKeyHeaders)) {
+      configureCacheKeyHeaders(config.cache.cacheKeyHeaders);
+      if (config.cache.cacheKeyHeaders.length > 0) {
+        console.log(`🔑 Cache key headers: ${config.cache.cacheKeyHeaders.join(', ')}`);
+      }
     }
   }
   

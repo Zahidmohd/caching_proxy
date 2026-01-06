@@ -4,22 +4,29 @@
  * 
  * Cache Key Strategy:
  * -------------------
- * Format: METHOD:URL
+ * Format: METHOD:URL or METHOD:URL:HEADER_HASH
  * 
  * The cache key uniquely identifies each request by combining:
  * 1. HTTP Method (GET, POST, PUT, etc.) - normalized to uppercase
  * 2. Complete URL including query parameters
+ * 3. Optional: Hash of specified request headers (when cacheKeyHeaders is configured)
  * 
  * Example Cache Keys:
- *   GET:https://dummyjson.com/products/1
- *   GET:https://dummyjson.com/products?limit=10&skip=5
- *   POST:https://dummyjson.com/products/add
+ *   Basic:
+ *     GET:https://dummyjson.com/products/1
+ *     GET:https://dummyjson.com/products?limit=10&skip=5
+ *     POST:https://dummyjson.com/products/add
+ *   
+ *   With Header-Based Keys:
+ *     GET:https://api.com/data:a1b2c3d4  (with Accept-Language: en-US)
+ *     GET:https://api.com/data:x9y8z7w6  (with Accept-Language: fr-FR)
  * 
  * Why this strategy?
  *   ✅ Simple and readable
- *   ✅ Unique for each request (method + URL + query params)
+ *   ✅ Unique for each request (method + URL + query params + headers)
  *   ✅ Query parameters automatically included in URL
  *   ✅ Different methods cached separately (GET vs POST)
+ *   ✅ Optional header-based differentiation for content negotiation
  *   ✅ Efficient for lookups
  * 
  * Storage:
@@ -31,6 +38,7 @@
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
+const crypto = require('crypto');
 const { recordHit, recordMiss, recordCompression } = require('./analytics');
 
 // Cache file path
@@ -47,6 +55,9 @@ let MAX_CACHE_SIZE_MB = 100;   // Maximum cache size in MB
 
 // Compression configuration
 let COMPRESSION_METHOD = 'gzip'; // Options: 'gzip', 'brotli', 'none'
+
+// Header-based cache keys configuration
+let CACHE_KEY_HEADERS = []; // Headers to include in cache key (e.g., ['accept-language', 'accept-encoding'])
 
 // Pattern-based TTL configuration
 // Format: { "/pattern/*": ttlInSeconds, ... }
@@ -78,6 +89,22 @@ function configureCompression(method = 'gzip') {
   } else {
     console.warn(`⚠️  Invalid compression method: ${method}. Using default (gzip)`);
     COMPRESSION_METHOD = 'gzip';
+  }
+}
+
+/**
+ * Configure which headers to include in cache keys
+ * @param {Array<string>} headers - List of header names to include (case-insensitive)
+ * @example
+ * configureCacheKeyHeaders(['accept-language', 'accept-encoding'])
+ */
+function configureCacheKeyHeaders(headers = []) {
+  if (Array.isArray(headers)) {
+    // Normalize header names to lowercase
+    CACHE_KEY_HEADERS = headers.map(h => h.toLowerCase());
+  } else {
+    console.warn(`⚠️  Invalid cache key headers: ${headers}. Using default (none)`);
+    CACHE_KEY_HEADERS = [];
   }
 }
 
@@ -303,23 +330,46 @@ function shouldCacheResponse(statusCode) {
 /**
  * Generate a unique cache key based on request details
  * Format: METHOD:URL (including query parameters)
+ * Optionally includes header values for header-based cache differentiation
  * 
  * Examples:
- *   GET:https://dummyjson.com/products/1
- *   GET:https://dummyjson.com/products?limit=10&skip=5
- *   POST:https://dummyjson.com/products/add
+ *   - Without headers: GET:https://dummyjson.com/products/1
+ *   - With headers: GET:https://dummyjson.com/products/1:a1b2c3d4
  * 
  * @param {string} method - HTTP method (GET, POST, etc.)
  * @param {string} url - Complete URL including query parameters
+ * @param {Object} headers - Request headers (optional)
  * @returns {string} - Unique cache key
+ * 
+ * If CACHE_KEY_HEADERS is configured, includes a hash of specified header values.
+ * This allows different cache entries for different header combinations.
  */
-function generateCacheKey(method, url) {
+function generateCacheKey(method, url, headers = {}) {
   // Normalize method to uppercase for consistency
   const normalizedMethod = method.toUpperCase();
   
-  // Cache key format: METHOD:URL
-  // URL already includes query parameters, so they're automatically part of the key
-  const cacheKey = `${normalizedMethod}:${url}`;
+  // Base cache key format: METHOD:URL
+  let cacheKey = `${normalizedMethod}:${url}`;
+  
+  // If header-based keys are enabled, append header hash
+  if (CACHE_KEY_HEADERS.length > 0 && headers) {
+    const headerValues = CACHE_KEY_HEADERS
+      .map(headerName => {
+        // Find header (case-insensitive)
+        const actualHeader = Object.keys(headers).find(
+          h => h.toLowerCase() === headerName
+        );
+        return actualHeader ? `${headerName}:${headers[actualHeader]}` : '';
+      })
+      .filter(v => v) // Remove empty values
+      .join('|');
+    
+    if (headerValues) {
+      // Create short hash of header values
+      const hash = crypto.createHash('md5').update(headerValues).digest('hex').substring(0, 8);
+      cacheKey += `:${hash}`;
+    }
+  }
   
   return cacheKey;
 }
@@ -328,6 +378,9 @@ function generateCacheKey(method, url) {
  * Get cached response for a given request
  * @param {string} method - HTTP method
  * @param {string} url - Complete URL
+ * @param {Date.now()} startTime - Start time for response time calculation
+ * @param {string} requestId - Request ID for logging
+ * @param {Object} headers - Request headers (for header-based cache keys)
  * @returns {Object|null} - Cached response object or null if not found
  * 
  * Returns null if cache miss, otherwise returns:
@@ -337,8 +390,8 @@ function generateCacheKey(method, url) {
  *   body: string
  * }
  */
-function getCachedResponse(method, url, startTime = Date.now(), requestId = null) {
-  const key = generateCacheKey(method, url);
+function getCachedResponse(method, url, startTime = Date.now(), requestId = null, headers = {}) {
+  const key = generateCacheKey(method, url, headers);
   const cache = loadCache();
   const cached = cache.get(key);
   
@@ -559,7 +612,7 @@ function isCacheable(cacheControl) {
  *   ❌ NOT CACHED: 4xx client errors (404, 400, 401, etc.)
  *   ❌ NOT CACHED: 5xx server errors (500, 502, 503, etc.)
  */
-function setCachedResponse(method, url, responseData, hasAuth = false, cacheControl = null, requestId = null) {
+function setCachedResponse(method, url, responseData, hasAuth = false, cacheControl = null, requestId = null, requestHeaders = {}) {
   // Only cache GET requests (standard HTTP caching practice)
   if (method.toUpperCase() !== 'GET') {
     console.log(`⏭️  NOT cached (method ${method}): ${method}:${url}`);
@@ -584,7 +637,7 @@ function setCachedResponse(method, url, responseData, hasAuth = false, cacheCont
     return false;
   }
   
-  const key = generateCacheKey(method, url);
+  const key = generateCacheKey(method, url, requestHeaders);
   const cache = loadCache();
   
   // Determine TTL based on priority: Cache-Control > Custom Config > Default
@@ -929,6 +982,7 @@ module.exports = {
   shouldCacheResponse,
   configureCacheLimits,
   configureCompression,
+  configureCacheKeyHeaders,
   configurePatternTTL,
   matchPattern,
   getTTLForURL,

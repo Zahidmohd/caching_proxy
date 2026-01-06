@@ -679,7 +679,7 @@ function fetchAndCache(fullUrl, originUrl) {
               });
             } else {
               // Cache the response
-              setCachedResponse('GET', fullUrl, responseData);
+              setCachedResponse('GET', fullUrl, responseData, false, cacheControl, null, options.headers);
               
               resolve({
                 success: true,

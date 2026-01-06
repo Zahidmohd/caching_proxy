@@ -14,6 +14,10 @@
     "maxEntries": 10000,
     "maxSizeMB": 500,
     "strategy": "lru",
+    "compression": {
+      "enabled": true,
+      "method": "brotli"
+    },
     "customTTL": {
       "/api/products/*": 600,
       "/api/users/*": 60,
